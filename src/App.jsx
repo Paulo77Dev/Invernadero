@@ -40,7 +40,7 @@ function App() {
 
   // opcional: tentar conectar WS — se o ESP tiver ws em ws://IP/ws
   useEffect(() => {
-    const wsUrl = (process.env.REACT_APP_ESP_WS || "").trim();
+    const wsUrl = (import.meta.env.VITE_ESP_WS || "").trim();
     if (!wsUrl) return;
     const ws = createSensorWebSocket(wsUrl,
       (data) => {

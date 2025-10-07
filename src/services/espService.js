@@ -1,5 +1,6 @@
 // src/services/espService.js
-const ESP_BASE = process.env.REACT_APP_ESP_URL || "http://192.168.4.1"; // default AP IP
+const ESP_BASE = import.meta.env.VITE_ESP_URL || "http://192.168.4.1";
+
 
 export async function fetchSensors() {
   const res = await fetch(`${ESP_BASE}/sensors`, { method: "GET" });
