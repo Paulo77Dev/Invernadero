@@ -1,0 +1,49 @@
+.logContainer {
+  grid-area: eventlog;
+  border-top: var(--primary-border);
+  padding: 1rem;
+}
+
+.title {
+  font-size: 0.9rem;
+  letter-spacing: 1px;
+  margin-bottom: 1rem;
+}
+
+.logList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.logItem {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: var(--primary-border);
+  border-radius: 8px;
+  background-color: #fff;
+}
+
+.checkbox {
+  width: 20px;
+  height: 20px;
+  border: var(--primary-border);
+  flex-shrink: 0;
+}
+
+.textContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.logText {
+  font-size: 0.9rem;
+}
+
+.logTime {
+  font-size: 0.75rem;
+  color: #888;
+}
