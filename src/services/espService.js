@@ -8,12 +8,13 @@ export async function fetchSensors() {
   return res.json();
 }
 
+// --- CÓDIGO EDITADO ABAIXO ---
 export async function sendControl(payload) {
-  // payload: { irrigation, fans, lights }
+  // payload agora é: { mode, irrigation, fans, lights }
   const res = await fetch(`${ESP_BASE}/control`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(payload), // Envia o payload completo como ele vier
   });
   if (!res.ok) {
     const txt = await res.text().catch(()=>null);
@@ -21,6 +22,7 @@ export async function sendControl(payload) {
   }
   return res.json();
 }
+// --- FIM DA EDIÇÃO ---
 
 // WebSocket helper: recebe URL ws://...
 export function createSensorWebSocket(wsUrl, onMessage, onOpen, onClose) {
