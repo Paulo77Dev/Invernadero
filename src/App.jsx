@@ -1,11 +1,14 @@
 import React, { useEffect, useState, useRef } from 'react';
+import styles from './styles/App.module.css';
 import Header from './components/Header/Header';
 import SensorDisplay from './components/SensorDisplay/SensorDisplay';
 import ControlSlider from './components/ControlSlider/ControlSlider';
 import ControlButton from './components/ControlButton/ControlButton';
 import EventLog from './components/EventLog/EventLog';
 import TimeSeriesChart from './components/TimeSeriesChart/TimeSeriesChart';
-import { fetchSensors, sendControl, createSensorWebSocket } from './services/espService';
+import ExportModal from './components/ExportModal/ExportModal';
+import { fetchSensors, sendControl } from './services/espService';
+import { FaTemperatureHigh, FaTint, FaWater } from 'react-icons/fa';
 
 const MAX_HISTORY = 300;
 const HISTORY_KEY = 'sensor_history_v1';
@@ -15,20 +18,178 @@ function App() {
   const [irrigation, setIrrigation] = useState(30);
   const [fans, setFans] = useState(50);
   const [lights, setLights] = useState(false);
-
   const [temperature, setTemperature] = useState(null);
   const [humidity, setHumidity] = useState(null);
   const [waterLevel, setWaterLevel] = useState(null);
   const [events, setEvents] = useState([]);
   const [history, setHistory] = useState([]);
-  const pausedRef = useRef(false);
-  const wsRef = useRef(null);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const prevModeRef = useRef(mode);
 
-  // client-side dedupe for reporting (avoid spamming server)
-  const lastReportedRef = useRef({}); // type -> timestamp
-  const CLIENT_REPORT_COOLDOWN = Number(import.meta.env.VITE_ALERT_CLIENT_COOLDOWN_MS) || 60_000;
+  const [isPaused, setIsPaused] = useState(false);
 
-  // load / save history
+  const sendPushNotification = async (type, level, message) => {
+    try {
+      const useMockServer = import.meta.env.VITE_USE_MOCK_SERVER === "true";
+      const token = import.meta.env.VITE_PUSHBULLET_TOKEN || "o.QjW0w3GZtHAWMqOyBYaCbrD8PD41u7LI";
+
+      if (useMockServer) {
+        const url = `${import.meta.env.VITE_ESP_URL || "http://localhost:3001"}/report/alert`;
+        const payload = { type, level, message };
+        const headers = { "Content-Type": "application/json" };
+        const reportKey = import.meta.env.VITE_REPORT_API_KEY || "";
+        if (reportKey) headers["x-api-key"] = reportKey;
+        const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(payload) });
+        if (!res.ok) { console.warn("sendPushNotification (mock): resposta não OK", res.status); } 
+        else { console.log("🧪 Notificação mock enviada:", message); }
+      } else {
+        const resp = await fetch("https://api.pushbullet.com/v2/pushes", {
+          method: "POST",
+          headers: { "Access-Token": token, "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "note", title: `[${level.toUpperCase()}] ${type}`, body: message }),
+        });
+        if (!resp.ok) { console.warn("sendPushNotification (pushbullet): erro HTTP", resp.status); } 
+        else { console.log("📲 Notificação Pushbullet enviada:", message); }
+      }
+    } catch (e) {
+      console.error("🚫 Falha ao enviar notificação:", e);
+    }
+  };
+
+  const addEvent = (message, type = 'info', meta = {}) => {
+    const newEvent = { message, type, meta, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) };
+    setEvents(prev => [newEvent, ...prev].slice(0, 50));
+    if (type === 'error' || type === 'warning') {
+      const level = type === 'error' ? 'critical' : 'warning';
+      sendPushNotification(type, level, message);
+    }
+    if (type === 'action') {
+      const metaText = meta && Object.keys(meta).length ? ' | ' + Object.entries(meta).map(([k,v]) => `${k}: ${v}`).join(', ') : '';
+      sendPushNotification('activity', 'normal', `${message}${metaText}`);
+    }
+  };
+
+  const changeMode = (newMode) => {
+    const prev = prevModeRef.current ?? mode;
+    if (newMode === prev) {
+      addEvent(`Tentativa de mudar modo para o mesmo valor: ${newMode} (ignorado)`, 'info');
+      return;
+    }
+    setMode(newMode);
+    const readablePrev = String(prev);
+    const readableNew = String(newMode);
+    const msg = `Modo alterado: ${readablePrev} → ${readableNew}`;
+    addEvent(msg, 'action', { from: readablePrev, to: readableNew });
+    sendPushNotification('modeChanged', 'normal', msg);
+    prevModeRef.current = newMode;
+  };
+
+  const handleSendControls = async () => {
+    try {
+      const payload = { mode, irrigation: Number(irrigation), fans: Number(fans), lights: !!lights };
+      await sendControl(payload);
+      const logMessage = `Comando enviado -> BOMBA DE RIEGO: ${payload.irrigation}%, AFICIONADOS: ${payload.fans}%, LUCES: ${payload.lights ? 'ON' : 'OFF'}, Modo: ${payload.mode}`;
+      addEvent(logMessage, 'action', { BOMBA_DE_RIEGO: payload.irrigation, AFICIONADOS: payload.fans, LUCES: payload.lights, MODO: payload.mode });
+      sendPushNotification('controlsSent', 'normal', `Controles enviados | BOMBA: ${payload.irrigation}% | AFICIONADOS: ${payload.fans}% | LUCES: ${payload.lights ? 'ON' : 'OFF'}`);
+    } catch (e) {
+      addEvent("Erro ao enviar o controle para o ESP", 'error');
+      sendPushNotification('controlsError', 'critical', 'Erro ao enviar controles ao ESP');
+    }
+  };
+
+  const handleEmergencyStop = async () => {
+    addEvent("PARADA DE EMERGENCIA ATIVADA", 'warning');
+    setIrrigation(0); setFans(0); setLights(false); changeMode('manual');
+    try {
+      await sendControl({ mode: 'manual', irrigation: 0, fans: 0, lights: false });
+      addEvent("Comando de emergência enviado", 'action', { BOMBA_DE_RIEGO: 0, AFICIONADOS: 0, LUCES: false, MODO: 'manual' });
+      sendPushNotification('emergency', 'critical', 'Parada de emergencia enviada ao ESP');
+    } catch (e) { 
+      addEvent("Falha ao enviar emergência", 'error'); 
+      sendPushNotification('emergencyError', 'critical', 'Falha ao enviar parada de emergencia');
+    }
+  };
+
+  const handlePauseToggle = async () => {
+    const newPauseState = !isPaused;
+    setIsPaused(newPauseState);
+    const message = newPauseState ? 'Sistema pausado' : 'Sistema retomado';
+    addEvent(message, 'action', { paused: newPauseState });
+    
+    try {
+      await sendControl({ paused: newPauseState });
+      sendPushNotification('pauseToggle', 'normal', `Comando '${message}' enviado ao ESP.`);
+    } catch (e) {
+      addEvent(`Erro ao enviar comando de pausa/retomada.`, 'error');
+      sendPushNotification('pauseError', 'critical', 'Falha ao pausar/retomar o sistema no ESP.');
+      setIsPaused(!newPauseState);
+    }
+  };
+  
+  const handleClearHistory = () => {
+    setHistory([]);
+    addEvent('Histórico limpo', 'action');
+    sendPushNotification('historyCleared', 'normal', 'O histórico foi limpo.');
+  };
+  
+  const handleExport = () => {
+    if (!history.length) {
+      addEvent('O histórico está vazio. Nada para exportar.', 'warning');
+      return;
+    }
+    setIsExportModalOpen(true);
+    addEvent('Exportação de CSV iniciada', 'action');
+    sendPushNotification('csvExported', 'normal', `Exportação iniciada. ${history.length} registros.`);
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    const getAndSet = async () => {
+      if (isPaused) return;
+      try {
+        const data = await fetchSensors();
+        if (!mounted) return;
+
+        if (typeof data.is_paused === 'boolean' && data.is_paused !== isPaused) {
+            setIsPaused(data.is_paused);
+        }
+
+        const sample = {
+          ts: data.ts || new Date().toISOString(),
+          temperature: data.temperature ?? null,
+          humidity: data.humidity ?? null,
+          water_level: data.water_level ?? null,
+          irrigation: Number(irrigation),
+          fans: Number(fans),
+          lights: !!lights
+        };
+
+        setTemperature(sample.temperature);
+        setHumidity(sample.humidity);
+        setWaterLevel(sample.water_level);
+        setHistory(prev => [...prev.slice(-MAX_HISTORY + 1), sample]);
+
+        addEvent(
+          `Dados recebidos: T:${sample.temperature ?? '-'}°C H:${sample.humidity ?? '-'}% W:${sample.water_level ?? '-'}%`,
+          'success'
+        );
+      } catch (e) {
+        console.warn("fetchSensors erro:", e);
+        const msg = `Falha ao buscar sensores: ${e?.message || 'erro desconhecido'}`;
+        addEvent(msg, 'error');
+        sendPushNotification('sensorFailure', 'critical', msg);
+      }
+    };
+    
+    getAndSet();
+    const iv = setInterval(getAndSet, 5000);
+    return () => { mounted = false; clearInterval(iv); };
+  }, []); // <<< ÚNICA CORREÇÃO: `isPaused` foi removido daqui
+
+  useEffect(() => {
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch (e) { console.warn('Erro salvando histórico', e); }
+  }, [history]);
+
   useEffect(() => {
     try {
       const raw = localStorage.getItem(HISTORY_KEY);
@@ -39,240 +200,53 @@ function App() {
     } catch (e) { console.warn('Não foi possível carregar histórico do localStorage', e); }
   }, []);
 
-  useEffect(() => {
-    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch (e) { console.warn('Erro salvando histórico', e); }
-  }, [history]);
-
-  const pushSample = (sample) => {
-    if (pausedRef.current) return;
-    setHistory(prev => {
-      const next = prev.length >= MAX_HISTORY ? prev.slice(prev.length - (MAX_HISTORY - 1)) : prev;
-      return [...next, sample];
-    });
-  };
-
-  const addEvent = (msg) => {
-    setEvents(prev => [{ message: msg, time: new Date().toLocaleTimeString() }, ...prev].slice(0,50));
-  };
-
-  // polling fallback
-  useEffect(() => {
-    let mounted = true;
-    const getAndSet = async () => {
-      try {
-        const data = await fetchSensors();
-        if (!mounted) return;
-        const sample = {
-          ts: data.ts || new Date().toISOString(),
-          temperature: data.temperature ?? null,
-          humidity: data.humidity ?? null,
-          water_level: data.water_level ?? null
-        };
-        setTemperature(sample.temperature);
-        setHumidity(sample.humidity);
-        setWaterLevel(sample.water_level);
-        pushSample(sample);
-      } catch (e) {
-        console.warn("fetchSensors erro:", e);
-      }
-    };
-    getAndSet();
-    const iv = setInterval(getAndSet, 30000);
-    return () => { mounted = false; clearInterval(iv); };
-  }, []);
-
-  // websocket push
-  useEffect(() => {
-    const wsUrl = (import.meta.env.VITE_ESP_WS || "").trim();
-    if (!wsUrl) return;
-    const ws = createSensorWebSocket(wsUrl,
-      (msg) => {
-        const obj = (msg && msg.payload) ? msg.payload : msg;
-        if (!obj) return;
-        const sample = {
-          ts: obj.ts || new Date().toISOString(),
-          temperature: obj.temperature ?? null,
-          humidity: obj.humidity ?? null,
-          water_level: obj.water_level ?? null
-        };
-        if (sample.temperature !== null) setTemperature(sample.temperature);
-        if (sample.humidity !== null) setHumidity(sample.humidity);
-        if (sample.water_level !== null) setWaterLevel(sample.water_level);
-        pushSample(sample);
-        addEvent('Sensor update');
-      },
-      () => { console.log('WS aberto', wsUrl); addEvent('WS conectado'); },
-      () => { console.log('WS fechado'); addEvent('WS desconectado'); }
-    );
-    wsRef.current = ws;
-    return () => { try { ws.close(); } catch{} };
-  }, []);
-
-  // reportAlert: envia /report/alert ao servidor (usa header x-api-key se VITE_REPORT_API_KEY estiver definido)
-  async function reportAlert(type, level, message, sample = null) {
-    try {
-      const now = Date.now();
-      const last = lastReportedRef.current[type] || 0;
-      if (now - last < CLIENT_REPORT_COOLDOWN) {
-        console.log('[UI] reportAlert skipped by client cooldown', type);
-        return;
-      }
-      lastReportedRef.current[type] = now;
-
-      const base = import.meta.env.VITE_ESP_URL || "http://localhost:3001";
-      const url = `${base}/report/alert`;
-      const body = { type, level, message, sample };
-      const headers = { 'Content-Type': 'application/json' };
-      const reportKey = import.meta.env.VITE_REPORT_API_KEY || "";
-      if (reportKey) headers['x-api-key'] = reportKey;
-
-      const resp = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
-      const json = await resp.json().catch(()=>null);
-      console.log('[UI] reportAlert result', resp.status, json);
-      addEvent(`Report sent: ${type} (${level})`);
-    } catch (e) {
-      console.warn('[UI] falha ao reportar alert', e);
-      addEvent(`Falha report alert ${type}: ${e.message}`);
-    }
-  }
-
-  // detection: on history changes detect anomalies
-  useEffect(() => {
-    if (!history || history.length === 0) return;
-    const last = history[history.length - 1];
-    const prev = history.length > 1 ? history[history.length - 2] : null;
-
-    const TEMP_LIMIT = Number(import.meta.env.VITE_ALERT_TEMP_THRESHOLD) || 35;
-    const WATER_LIMIT = Number(import.meta.env.VITE_ALERT_WATER_THRESHOLD) || 20;
-
-    if (last.temperature != null && last.temperature > TEMP_LIMIT) {
-      reportAlert('tempHigh', 'critical', `Temperatura alta: ${last.temperature} °C`, last);
-    }
-
-    if (last.water_level != null && last.water_level < WATER_LIMIT) {
-      reportAlert('waterLow', 'critical', `Nível de água baixo: ${last.water_level}%`, last);
-    }
-
-    if (prev && last.temperature != null && prev.temperature != null) {
-      const delta = Math.abs(last.temperature - prev.temperature);
-      if (delta > 8) reportAlert('tempSpike', 'warning', `Variação brusca: ${prev.temperature} -> ${last.temperature}`, { prev, last });
-    }
-
-    const recentNulls = history.slice(-5).filter(s => (s.temperature === null && s.humidity === null)).length;
-    if (recentNulls >= 3) reportAlert('sensorMissing', 'critical', 'Sensor com leituras nulas repetidas', { recentNulls });
-
-  }, [history]);
-
-  // staleness check
-  useEffect(() => {
-    const CHECK_MS = Number(import.meta.env.VITE_ALERT_UI_NOUPDATE_MS) || 15_000;
-    const iv = setInterval(() => {
-      if (!history.length) return;
-      const last = history[history.length - 1];
-      const lastTs = new Date(last.ts).getTime();
-      const now = Date.now();
-      if (now - lastTs > CHECK_MS) {
-        reportAlert('noUpdate', 'warning', `Sem atualizações no cliente há ${(now - lastTs)/1000}s`, last);
-      }
-    }, Math.min(5000, CHECK_MS));
-    return () => clearInterval(iv);
-  }, [history]);
-
-  // controls
-  const handleSendControls = async () => {
-    try {
-      const payload = { mode, irrigation: Number(irrigation), fans: Number(fans), lights: !!lights };
-      await sendControl(payload);
-      addEvent("Comando enviado: " + JSON.stringify(payload));
-    } catch (e) {
-      addEvent("Erro ao enviar controle: " + e.message);
-    }
-  } // Ponto e vírgula removido daqui
-
-  const handleEmergencyStop = async () => {
-    addEvent("EMERGENCY STOP ACTIVATED");
-    setIrrigation(0); setFans(0); setLights(false); setMode('manual');
-    try {
-      await sendControl({ mode: 'manual', irrigation: 0, fans: 0, lights: false });
-      addEvent("Emergency stop enviado ao ESP");
-    } catch (e) { addEvent("Falha ao enviar emergency: " + e.message); }
-  } // Ponto e vírgula removido daqui
-
-  const handlePauseToggle = () => { pausedRef.current = !pausedRef.current; addEvent(pausedRef.current ? 'Histórico pausado' : 'Histórico retomado'); };
-  const handleClearHistory = () => { setHistory([]); addEvent('Histórico limpo'); };
-  const exportCSV = () => {
-    if (!history.length) return;
-    const header = ["ts","temperature","humidity","water_level"];
-    const rows = history.map(r => [r.ts, r.temperature, r.humidity, r.water_level].join(","));
-    const csv = [header.join(","), ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `history_${new Date().toISOString().replace(/[:.]/g,'-')}.csv`; a.click(); URL.revokeObjectURL(url);
-    addEvent('Histórico exportado (CSV)');
-  };
-
   const isManualMode = mode === 'manual';
 
   return (
-    <div style={{ padding: 16 }}>
-      <Header mode={mode} setMode={setMode} />
-      <div style={{ display:'flex', gap:20, marginTop:16 }}>
-        <SensorDisplay label="TEMPERATURE" value={temperature ?? "-"} unit="°C" />
-        <SensorDisplay label="RELATIVE HUMIDITY" value={humidity ?? "-"} unit="%" />
-        <SensorDisplay label="WATER LEVEL" value={waterLevel ?? "-"} unit="%" />
+    <>
+      <div className={styles.dashboard}>
+        <div className={styles.headerArea}>
+          <Header mode={mode} setMode={changeMode} />
+        </div>
+        <div className={styles.sensorArea}>
+          <SensorDisplay icon={<FaTemperatureHigh />} label="TEMPERATURA" value={temperature} unit="°C" /> 
+          <SensorDisplay icon={<FaTint />} label="HUMEDAD RELATIVA" value={humidity} unit="%" />
+          <SensorDisplay icon={<FaWater />} label="NIVEL DEL AGUA" value={waterLevel} unit="%" />
+        </div>
+        <div className={styles.controlsArea}>
+          <ControlSlider label="BOMBA DE RIEGO" value={irrigation} onChange={(e) => setIrrigation(e.target.value)} disabled={!isManualMode || isPaused} />
+          <ControlSlider label="AFICIONADOS" value={fans} onChange={(e) => setFans(e.target.value)} disabled={!isManualMode || isPaused} />
+          <ControlButton type="toggle" label="LUCES" active={lights} onClick={() => setLights(!lights)} disabled={!isManualMode || isPaused} />
+          <ControlButton type="button" label="Enviar Controles" onClick={handleSendControls} disabled={!isManualMode || isPaused} />
+          <ControlButton type="emergency" label="PARADA DE EMERGENCIA" onClick={handleEmergencyStop} />
+        </div>
+        <div className={styles.chartArea}>
+          <TimeSeriesChart
+            data={history}
+            lines={[
+              { key: "temperature", name: "Temperatura (°C)", color: "var(--accent-red)" },
+              { key: "humidity", name: "Humedad (%)", color: "var(--accent-cyan)" },
+              { key: "water_level", name: "Nivel de Agua (%)", color: "var(--accent-green)" },
+            ]}
+          />
+        </div>
+        <div className={styles.actionsArea}>
+          <button className={styles.actionButton} onClick={handleClearHistory}>Limpar Histórico</button>
+          <button className={styles.actionButton} onClick={handlePauseToggle}>{isPaused ? 'Retomar' : 'Pausar'}</button>
+          <button className={styles.actionButton} onClick={handleExport}>Exportar CSV</button>
+          <div className={styles.sampleCount}>Demostraciones: {history.length}</div>
+        </div>
+        <div className={styles.logsArea}>
+          <EventLog events={events} />
+        </div>
       </div>
-
-      <div style={{ marginTop:20 }}>
-        <ControlSlider label="IRRIGATION PUMP" value={irrigation} onChange={(e)=>setIrrigation(e.target.value)} disabled={!isManualMode} />
-        <ControlSlider label="FANS" value={fans} onChange={(e)=>setFans(e.target.value)} disabled={!isManualMode} />
-        <ControlButton label="LIGHTS" type="toggle" active={lights} onClick={()=>setLights(!lights)} disabled={!isManualMode} />
-        <button onClick={handleSendControls} disabled={!isManualMode} style={{ marginLeft: 8 }}>Enviar controles</button>
-        <ControlButton label="EMERGENCY STOP" type="emergency" onClick={handleEmergencyStop} />
-      </div>
-
-      <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 18 }}>
-        <button onClick={handleClearHistory}>Limpar histórico</button>
-        <button onClick={handlePauseToggle}>{pausedRef.current ? 'Retomar' : 'Pausar'}</button>
-        <button onClick={exportCSV}>Exportar CSV</button>
-        <div style={{ marginLeft: "auto" }}>Amostras: {history.length}</div>
-      </div>
-
-      <TimeSeriesChart
-        data={history}
-        lines={[
-          { key: "temperature", name: "Temperatura (°C)", color: "#ff4d4f" },
-          { key: "humidity", name: "Umidade (%)", color: "#1890ff" },
-          { key: "water_level", name: "Nível Água (%)", color: "#52c41a" },
-        ]}
-      />
-
-      <EventLog events={events} />
-
-      <div style={{ marginTop: 16 }}>
-        <button
-          onClick={async () => {
-            try {
-              console.log('[UI] trigger /test/push');
-              const res = await fetch(`${import.meta.env.VITE_ESP_URL || 'http://localhost:3001'}/test/push`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: 'Teste via UI', body: 'Disparo de teste pelo frontend' })
-              });
-              console.log('[UI] response status', res.status);
-              const json = await res.json().catch(()=>null);
-              console.log('[UI] response body', json);
-              alert('Requisição enviada — veja console para detalhes');
-            } catch (err) {
-              console.error('[UI] erro no fetch /test/push', err);
-              alert('Erro no fetch — veja console');
-            }
-          }}
-        >
-          Teste push via UI
-        </button>
-      </div>
-    </div>
+      {isExportModalOpen && (
+        <ExportModal 
+          history={history} 
+          onClose={() => setIsExportModalOpen(false)} 
+        />
+      )}
+    </>
   );
 }
 
