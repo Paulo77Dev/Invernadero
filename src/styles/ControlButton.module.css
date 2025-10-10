@@ -1,94 +1,49 @@
-.toggleContainer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.label {
-  font-size: 0.8rem;
-  font-weight: 500;
-  letter-spacing: 1px;
-}
-
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 60px;
-  height: 30px;
-}
-
-.switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #fff;
-  border: var(--primary-border);
-  transition: .4s;
-}
-
-.slider:before {
-  position: absolute;
-  content: "";
-  height: 20px;
-  width: 20px;
-  left: 4px;
-  bottom: 3px;
-  background-color: var(--text-color);
-  transition: .4s;
-}
-
-input:checked + .slider {
-  background-color: var(--text-color);
-}
-
-input:checked + .slider:before {
-  transform: translateX(28px);
-  background-color: white;
-}
-
-.slider.round {
-  border-radius: 34px;
-}
-
-.slider.round:before {
-  border-radius: 50%;
-}
-
-input:disabled + .slider {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Estilos para o botão de emergência */
 .button {
   width: 100%;
-  padding: 1rem;
-  font-family: 'Roboto Mono', monospace;
-  font-size: 1rem;
+  padding: 0.8rem;
+  font-family: var(--primary-font);
+  font-size: 0.9rem;
   font-weight: 700;
   letter-spacing: 1px;
-  border: var(--primary-border);
+  text-transform: uppercase;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
+  border: 1px solid var(--accent-cyan);
+  background-color: transparent;
+  color: var(--accent-cyan);
+}
+
+.button:hover:not(:disabled) {
+  background-color: var(--accent-cyan);
+  color: var(--background-color);
+  box-shadow: 0 0 10px var(--accent-cyan);
+}
+
+.button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .emergency {
-  background-color: var(--emergency-red);
+  composes: button;
+  background-color: var(--accent-red);
+  border-color: var(--accent-red);
   color: white;
-  border-color: var(--emergency-red);
 }
 
-.emergency:hover {
-  background-color: var(--emergency-red-hover);
-  border-color: var(--emergency-red-hover);
+.emergency:hover:not(:disabled) {
+  background-color: var(--accent-red-hover);
+  border-color: var(--accent-red-hover);
+  box-shadow: 0 0 10px var(--accent-red);
 }
+
+.toggleContainer { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+.label { color: var(--text-primary); font-weight: 500; letter-spacing: 1px; text-transform: uppercase; font-size: 0.9em; }
+.switch { position: relative; display: inline-block; width: 50px; height: 28px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--text-secondary); transition: .4s; border-radius: 28px; }
+.slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+input:checked + .slider { background-color: var(--accent-green); }
+input:checked + .slider:before { transform: translateX(22px); }
+input:disabled + .slider { opacity: 0.4; cursor: not-allowed; }

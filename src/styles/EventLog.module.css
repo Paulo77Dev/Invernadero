@@ -1,49 +1,71 @@
-.logContainer {
-  grid-area: eventlog;
-  border-top: var(--primary-border);
-  padding: 1rem;
+.logsContainer {
+  display: flex;
+  gap: 20px;
 }
 
-.title {
-  font-size: 0.9rem;
-  letter-spacing: 1px;
-  margin-bottom: 1rem;
+.columnTitle { 
+  color: var(--text-secondary); 
+  margin: 0 0 12px 0; 
+  font-weight: 700; 
+  font-size: 1em; 
+  text-transform: uppercase; 
+  letter-spacing: 1px; 
+}
+
+.logColumn {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .logList {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  height: 180px;
+  overflow-y: auto;
+  padding-right: 5px;
+  font-family: 'Courier New', Courier, monospace;
 }
 
 .logItem {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  border: var(--primary-border);
-  border-radius: 8px;
-  background-color: #fff;
+  margin-bottom: 8px;
+  padding: 4px;
+  border-radius: 4px;
+  font-size: 0.9em;
 }
 
-.checkbox {
-  width: 20px;
-  height: 20px;
-  border: var(--primary-border);
-  flex-shrink: 0;
-}
-
-.textContainer {
+.icon {
+  margin-right: 10px;
+  margin-top: 2px; 
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  align-items: center;
+  font-size: 1.1em;
 }
 
-.logText {
-  font-size: 0.9rem;
+.message {
+  flex-grow: 1;
 }
 
-.logTime {
-  font-size: 0.75rem;
-  color: #888;
+.time { 
+  font-size: 0.8em; 
+  color: var(--text-secondary); 
+  margin-left: 10px; 
 }
+
+.emptyLog { 
+  color: var(--text-secondary); 
+  text-align: center; 
+  padding-top: 40px; 
+  font-style: italic; 
+}
+
+
+/* Cores por tipo */
+.info { color: var(--accent-cyan); }
+.success { color: var(--accent-green); }
+.action { color: var(--accent-yellow); }
+.error { color: var(--accent-red); }
+.warning { color: var(--accent-orange); }
+.success { color: var(--accent-cyan); }

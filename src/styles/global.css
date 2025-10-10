@@ -1,28 +1,41 @@
- /* src/styles/global.css */
-    @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&display=swap');
+/* Importa a fonte 'Inter' para um visual mais limpo e moderno */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
 
-    :root {
-      --background-color: #f0f0f0;
-      --container-border-color: #cccccc;
-      --text-color: #333333;
-      --primary-border: 1.5px solid var(--text-color);
-      --emergency-red: #d9534f;
-      --emergency-red-hover: #c9302c;
-    }
+/* Define as variáveis de cores para o tema "Mission Control" */
+:root {
+  /* Cores Base */
+  --background-color: #1A1A2E; /* Azul-noite */
+  --glass-bg: rgba(40, 42, 54, 0.6); /* Fundo do 'vidro fosco' */
+  --glass-border: 1px solid rgba(255, 255, 255, 0.1);
+  --text-primary: #F8F8F2; /* Branco-gelo */
+  --text-secondary: #8a99c4; /* Cinza-azulado mais claro */
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+  /* Cores de Acento e Status */
+  --accent-cyan: #8BE9FD;
+  --accent-green: #50FA7B;
+  --accent-yellow: #f1fa8c;
+  --accent-orange: #ffb86c;
+  --accent-red: #ff5555;
+  --accent-red-hover: #ff7979;
 
-    body {
-      font-family: 'Roboto Mono', monospace;
-      background-color: var(--background-color);
-      color: var(--text-color);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
-      padding: 2rem;
-    }
+  /* Fonte Principal */
+  --primary-font: 'Inter', sans-serif;
+}
+
+/* Reset básico e estilos globais */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--primary-font);
+  background-color: var(--background-color);
+  color: var(--text-primary);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 2rem;
+}

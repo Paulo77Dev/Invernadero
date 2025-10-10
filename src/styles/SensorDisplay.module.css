@@ -1,39 +1,52 @@
 .sensorCard {
+  padding: 1rem;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 1rem;
+  width: 160px;
+  text-align: center;
 }
 
 .label {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 500;
   letter-spacing: 1px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: uppercase;
 }
 
 .circle {
-  width: 120px;
-  height: 120px;
+  width: 130px;
+  height: 130px;
   border-radius: 50%;
-  border: var(--primary-border);
+  border: 2px solid var(--accent-cyan);
   display: flex;
   justify-content: center;
   align-items: center;
   flex-direction: column;
-  background-color: #fff;
+  background-image: radial-gradient(circle at center, rgba(139, 233, 253, 0.1), transparent 70%);
+  transition: all 0.3s ease;
+}
+
+.circle:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(139, 233, 253, 0.5);
 }
 
 .value {
-  font-size: 2.5rem;
+  font-size: 2.8rem;
   font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
 }
 
 .unit {
-  font-size: 1.5rem;
-  margin-left: 2px;
-}
-
-.graph {
-  width: 100%;
-  padding: 0 1rem;
+  font-size: 1.2rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-left: 4px;
 }

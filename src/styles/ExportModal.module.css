@@ -1,0 +1,139 @@
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: var(--glass-bg);
+  backdrop-filter: blur(15px);
+  border: var(--glass-border);
+  border-radius: 16px;
+  width: 90%;
+  max-width: 700px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  border-bottom: var(--glass-border);
+}
+
+.header h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.2rem;
+  color: var(--text-primary);
+}
+
+.closeButton {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.closeButton:hover {
+  color: var(--text-primary);
+}
+
+.content {
+  padding: 1.5rem;
+}
+
+.content p {
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+}
+
+.tableContainer {
+  height: 300px;
+  overflow-y: auto;
+  border: var(--glass-border);
+  border-radius: 8px;
+  background: rgba(0,0,0,0.2);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: var(--glass-border);
+}
+
+th {
+  position: sticky;
+  top: 0;
+  background: var(--glass-bg);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+td {
+  font-family: 'Courier New', Courier, monospace;
+  color: var(--text-secondary);
+}
+
+tbody tr:hover td {
+  background-color: rgba(139, 233, 253, 0.1);
+  color: var(--accent-cyan);
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  border-top: var(--glass-border);
+}
+
+.actionButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--accent-cyan);
+  background-color: transparent;
+  color: var(--accent-cyan);
+  font-family: var(--primary-font);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.actionButton:hover {
+  background-color: var(--accent-cyan);
+  color: var(--background-color);
+  box-shadow: 0 0 10px var(--accent-cyan);
+}
+
+.secondary {
+  border-color: var(--text-secondary);
+  color: var(--text-secondary);
+}
+
+.secondary:hover {
+  background-color: var(--text-secondary);
+  color: var(--background-color);
+  box-shadow: none;
+}

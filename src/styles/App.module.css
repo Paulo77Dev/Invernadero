@@ -1,68 +1,118 @@
+/* Estilo principal do painel */
 .dashboard {
   width: 100%;
-  max-width: 800px;
-  background-color: #fff;
-  border: var(--primary-border);
-  border-radius: 12px;
+  max-width: 1000px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  border: var(--glass-border);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+
+  /* Layout em Grid com todas as áreas, incluindo a de ações */
   display: grid;
   grid-template-areas:
     "header header"
-    "main controls"
-    "eventlog controls";
+    "sensors controls"
+    "chart chart"
+    "actions actions"
+    "logs logs";
   grid-template-columns: 2fr 1fr;
-  grid-template-rows: auto 1fr auto;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+  grid-template-rows: auto auto 1fr auto auto; 
 }
 
-.mainContent {
-  grid-area: main;
+/* Definição de cada área do grid */
+.headerArea { 
+  grid-area: header; 
+  border-bottom: var(--glass-border); 
+}
+
+.sensorArea { 
+  grid-area: sensors; 
+  display: flex; 
+  justify-content: space-around; 
+  align-items: center; 
+  padding: 2rem; 
+  gap: 1.5rem; 
+}
+
+.controlsArea { 
+  grid-area: controls; 
+  padding: 1.5rem; 
+  display: flex; 
+  flex-direction: column; 
+  gap: 2rem; 
+  border-left: var(--glass-border); 
+}
+
+.chartArea { 
+  grid-area: chart; 
+  padding: 1.5rem; 
+  border-top: var(--glass-border); 
+}
+
+.logsArea { 
+  grid-area: logs; 
+  padding: 1.5rem; 
+  border-top: var(--glass-border); 
+}
+
+/* Nova área para os botões de ação (Limpar Histórico, etc.) */
+.actionsArea {
+  grid-area: actions;
   display: flex;
-  justify-content: space-around;
+  gap: 12px;
   align-items: center;
-  padding: 2rem 1rem;
-  gap: 1rem;
+  padding: 1rem 1.5rem;
+  border-top: var(--glass-border);
 }
 
-.controls {
-  grid-area: controls;
-  border-left: var(--primary-border);
-  padding: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
+/* Estilo para os botões secundários na 'actionsArea' */
+.actionButton {
+  background: transparent;
+  border: 1px solid var(--text-secondary);
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: var(--primary-font);
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
 
-.placeholderLines {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: auto; /* Empurra para o final */
-  padding-top: 1rem;
+.actionButton:hover {
+  background-color: var(--text-secondary);
+  color: var(--background-color);
 }
 
-.placeholderLines div {
-  height: 6px;
-  background-color: var(--background-color);
-  border: var(--primary-border);
+/* Estilo para o contador de amostras */
+.sampleCount {
+  margin-left: auto; /* Empurra o contador de amostras para a direita */
+  color: var(--text-secondary);
+  font-size: 0.9em;
 }
 
-/* Responsividade para telas menores */
-@media (max-width: 768px) {
+/* Media Query para responsividade em telas menores */
+@media (max-width: 800px) {
   .dashboard {
-    grid-template-areas:
-      "header"
-      "main"
-      "controls"
-      "eventlog";
+    /* Altera o layout para uma única coluna */
+    grid-template-areas: 
+      "header" 
+      "sensors" 
+      "controls" 
+      "chart" 
+      "actions" 
+      "logs";
     grid-template-columns: 1fr;
+    grid-template-rows: auto; /* Deixa as linhas se ajustarem automaticamente */
   }
 
-  .controls {
-    border-left: none;
-    border-top: var(--primary-border);
+  .controlsArea { 
+    border-left: none; 
+    border-top: var(--glass-border); 
   }
-
-  .mainContent {
-    flex-direction: column;
+  
+  .sensorArea { 
+    flex-direction: column; 
   }
 }
