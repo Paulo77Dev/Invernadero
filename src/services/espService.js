@@ -1,161 +1,174 @@
-<<<<<<< HEAD
-// src/services/espService.js - ATUALIZADO
+// src/services/espService.js - VERSÃO CLOUD
+const CLOUD_API_URL = "https://invernadero.railway.app/api"; // 👈 SUA URL
 
-const ESP32_IP = "http://192.168.1.17"; // SEU IP
-const API_URL = ESP32_IP;
+let authToken = null;
+let currentUser = null;
 
-/**
- * reportAlertToServer()
- * Envia alertas via CallMeBot SEM CORS (usando método alternativo)
- */
-export async function reportAlertToServer(payload) {
-  const { type, level, message } = payload;
-  console.log(`[Notificação] ${type} (${level}): ${message}`);
+// 👇 FUNÇÕES DE AUTENTICAÇÃO (NOVAS)
+export function setAuthToken(token) {
+  authToken = token;
+}
 
+export function getCurrentUser() {
+  return currentUser;
+}
+
+export async function loginUser(email, password) {
   try {
-    // 👇 MÉTODO ALTERNATIVO - SEM CORS (usando Image ou Script)
-    const phone = "+5219992091920"; // SEU NÚMERO
-    const apikey = "9765307"; // SUA API KEY
-    const text = `🌱 ESTUFA INTELIGENTE\n${message}\n⏰ ${new Date().toLocaleString()}`;
-    
-    const url = `https://api.callmebot.com/whatsapp.php?phone=${phone}&text=${encodeURIComponent(text)}&apikey=${apikey}`;
-    
-    // 👇 MÉTODO QUE EVITA CORS - usando Image object
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.src = url;
-      img.onload = () => {
-        console.log("✅ Notificação WhatsApp enviada!");
-        resolve(true);
-      };
-      img.onerror = () => {
-        console.log("✅ Notificação enviada (imagem CORS bypass)");
-        resolve(true);
-      };
+    const response = await fetch(`${CLOUD_API_URL}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
     });
-    
-  } catch (err) {
-    console.error("❌ Erro ao enviar notificação WhatsApp:", err);
-    
-    // Fallback: notificação do navegador
-    if (Notification.permission === "granted") {
-      new Notification(`🌱 ${type}`, { body: message });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Login falhou');
     }
     
-    return false;
-=======
-// src/services/espService.js — VERSÃO CORRIGIDA
-const API_URL = "http://localhost:4000";
-
-/**
- * safeJson()
- * Faz parse seguro do JSON retornado
- */
-async function safeJson(resp) {
-  try {
-    return await resp.json();
-  } catch {
-    return null;
->>>>>>> a1baa8bdd60e2ad88517ade5900ba8fdd49ef31b
+    const data = await response.json();
+    setAuthToken(data.token);
+    currentUser = data.user;
+    
+    // Salvar no localStorage para persistência
+    localStorage.setItem('authToken', data.token);
+    localStorage.setItem('user', JSON.stringify(data.user));
+    
+    return data;
+  } catch (error) {
+    console.error('Erro no login:', error);
+    throw error;
   }
 }
 
-/**
- * fetchSensors()
-<<<<<<< HEAD
- * Busca dados dos sensores com tratamento CORS
- */
+export function logout() {
+  authToken = null;
+  currentUser = null;
+  localStorage.removeItem('authToken');
+  localStorage.removeItem('user');
+}
+
+// 👇 CARREGAR TOKEN SALVO (para recarregar página)
+export function loadSavedAuth() {
+  const token = localStorage.getItem('authToken');
+  const user = localStorage.getItem('user');
+  
+  if (token && user) {
+    authToken = token;
+    currentUser = JSON.parse(user);
+    return true;
+  }
+  return false;
+}
+
+// 👇 BUSCAR DADOS DO CLOUD (ATUALIZADA)
 export async function fetchSensors() {
+  if (!authToken) throw new Error('Não autenticado - Faça login primeiro');
+
   try {
-    const res = await fetch(`${API_URL}/sensors`, { 
+    const res = await fetch(`${CLOUD_API_URL}/sensors`, { 
       method: "GET",
-      mode: "cors", // 👈 Tenta modo CORS
       headers: {
+        "Authorization": `Bearer ${authToken}`,
         "Accept": "application/json"
-      },
-      timeout: 10000
+      }
     });
     
     if (!res.ok) throw new Error(`Falha ao buscar sensores: ${res.status}`);
     return await res.json();
   } catch (err) {
-    console.error("Erro ao buscar sensores do ESP32:", err);
-    throw new Error("ESP32 não conectado ou sem resposta");
-=======
- * Busca os dados dos sensores
- */
-export async function fetchSensors() {
-  try {
-    const res = await fetch(`${API_URL}/sensors`, { method: "GET", cache: "no-store" });
-    if (!res.ok) throw new Error(`Falha fetch sensors: ${res.status}`);
-    return await res.json();
-  } catch (err) {
-    console.error("Erro ao buscar sensores:", err);
-    throw err;
->>>>>>> a1baa8bdd60e2ad88517ade5900ba8fdd49ef31b
+    console.error("Erro ao buscar sensores do cloud:", err);
+    throw new Error("Servidor cloud não disponível");
   }
 }
 
-/**
- * sendControl()
-<<<<<<< HEAD
- * Envia comandos com tratamento CORS
-=======
- * Envia comandos de controle (bomba, ventiladores, luzes)
->>>>>>> a1baa8bdd60e2ad88517ade5900ba8fdd49ef31b
- */
+// 👇 ENVIAR COMANDOS PARA CLOUD (ATUALIZADA)
 export async function sendControl(payload) {
+  if (!authToken) throw new Error('Não autenticado - Faça login primeiro');
+
   try {
-    const res = await fetch(`${API_URL}/control`, {
+    const res = await fetch(`${CLOUD_API_URL}/control`, {
       method: "POST",
-<<<<<<< HEAD
-      mode: "cors", // 👈 Tenta modo CORS
       headers: { 
+        "Authorization": `Bearer ${authToken}`,
         "Content-Type": "application/json",
         "Accept": "application/json"
       },
-      body: JSON.stringify(payload),
-      timeout: 10000
+      body: JSON.stringify(payload)
     });
     
     if (!res.ok) throw new Error(`Falha ao enviar controle: ${res.status}`);
     return await res.json();
   } catch (err) {
-    console.error("Erro ao enviar controle para ESP32:", err);
-    throw new Error("Falha na comunicação com ESP32 - Verifique CORS");
-=======
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    if (!res.ok) throw new Error(`Falha envio controle: ${res.status}`);
-    return safeJson(res);
-  } catch (err) {
-    console.error("Erro ao enviar controle:", err);
-    throw err;
+    console.error("Erro ao enviar controle para cloud:", err);
+    throw new Error("Falha na comunicação com servidor cloud");
   }
 }
 
-/**
- * reportAlertToServer()
- * ENVIA PARA O BACKEND QUE ENVIA O WHATSAPP
- */
+// 👇 ENVIAR ALERTAS VIA CLOUD (ATUALIZADA)
 export async function reportAlertToServer(payload) {
-  const { type, level, message } = payload;
-  console.log(`[Notificação] ${type} (${level}): ${message}`);
+  if (!authToken) {
+    console.log("⚠️ Não autenticado - Alerta registrado localmente:", payload.message);
+    
+    // Fallback: notificação do navegador
+    if (Notification.permission === "granted") {
+      new Notification(`🌱 ${payload.type}`, { body: payload.message });
+    }
+    return false;
+  }
 
   try {
-    const res = await fetch(`${API_URL}/alert`, {
+    const res = await fetch(`${CLOUD_API_URL}/alert`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, level, message })
+      headers: { 
+        "Authorization": `Bearer ${authToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
     });
     
-    if (!res.ok) throw new Error(`Falha HTTP ${res.status}`);
-    console.log("✅ Notificação enviada para o backend!");
+    if (!res.ok) throw new Error(`Falha ao enviar alerta: ${res.status}`);
+    console.log("✅ Alerta enviado para cloud/WhatsApp!");
     return true;
   } catch (err) {
-    console.error("❌ Erro ao enviar notificação:", err);
+    console.error("❌ Erro ao enviar alerta para cloud:", err);
+    
+    // Fallback: notificação do navegador
+    if (Notification.permission === "granted") {
+      new Notification(`🌱 ${payload.type}`, { body: payload.message });
+    }
+    
+    return false;
+  }
+}
+
+// 👇 FUNÇÃO PARA VERIFICAR CONEXÃO COM CLOUD
+export async function checkCloudConnection() {
+  try {
+    const response = await fetch(`${CLOUD_API_URL}/health`);
+    const data = await response.json();
+    return data.status === 'ok';
+  } catch (error) {
+    console.error('❌ Servidor cloud offline');
+    return false;
+  }
+}
+
+// 👇 ENVIAR DADOS DO ESP32 PARA CLOUD (PARA O ESP32 USAR)
+export async function sendDeviceData(deviceData) {
+  try {
+    const res = await fetch(`${CLOUD_API_URL}/device/data`, {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(deviceData)
+    });
+    
+    if (!res.ok) throw new Error(`Falha ao enviar dados: ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error("Erro ao enviar dados para cloud:", err);
     throw err;
->>>>>>> a1baa8bdd60e2ad88517ade5900ba8fdd49ef31b
   }
 }
