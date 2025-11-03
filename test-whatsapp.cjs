@@ -1,55 +1,28 @@
-<<<<<<< HEAD
-// test-whatsapp.cjs - NÃO PRECISA DE INSTALAÇÃO
-=======
-// teste-whatsapp-simples.js - NÃO PRECISA DE INSTALAÇÃO
->>>>>>> a1baa8bdd60e2ad88517ade5900ba8fdd49ef31b
+// test-whatsapp.cjs - VERSÃO CORRIGIDA
 require('dotenv').config();
-const https = require('https');
 
-console.log('🧪 Iniciando teste do WhatsApp...');
+const CALLMEBOT_APIKEY = "7758207"; // SUA API KEY ATUAL
+const CALLMEBOT_PHONE = "+573208547840"; // SEU NÚMERO ATUAL
 
-const CALLMEBOT_APIKEY = process.env.CALLMEBOT_APIKEY;
-const PHONE_NUMBER = process.env.CALLMEBOT_PHONE;
-
-console.log('📞 Número:', PHONE_NUMBER);
-console.log('🔑 API Key:', CALLMEBOT_APIKEY ? '***' + CALLMEBOT_APIKEY.slice(-4) : 'NÃO ENCONTRADA');
-
-if (!CALLMEBOT_APIKEY || !PHONE_NUMBER) {
-  console.log('❌ ERRO: Credenciais não encontradas no .env');
-  console.log('📍 Verifique se seu arquivo .env tem:');
-  console.log('   CALLMEBOT_APIKEY=sua_chave');
-  console.log('   CALLMEBOT_PHONE=+seu_numero');
-  process.exit(1);
+async function testWhatsApp() {
+  try {
+    const message = "🔔 TESTE DO SISTEMA ESTUFA\n✅ Notificações funcionando!\n🕒 " + new Date().toLocaleString();
+    
+    const url = `https://api.callmebot.com/whatsapp.php?phone=${CALLMEBOT_PHONE}&text=${encodeURIComponent(message)}&apikey=${CALLMEBOT_APIKEY}`;
+    
+    console.log('📱 Enviando teste WhatsApp...');
+    console.log('📞 Para:', CALLMEBOT_PHONE);
+    console.log('💬 Mensagem:', message);
+    
+    const response = await fetch(url);
+    const result = await response.text();
+    
+    console.log('✅ Resposta do CallMeBot:', result);
+    console.log('📲 Verifique seu WhatsApp!');
+    
+  } catch (error) {
+    console.error('❌ Erro:', error.message);
+  }
 }
 
-const message = "✅ TESTE: Esta é uma mensagem de teste do sistema!";
-const url = `https://api.callmebot.com/whatsapp.php?phone=${PHONE_NUMBER}&text=${encodeURIComponent(message)}&apikey=${CALLMEBOT_APIKEY}`;
-
-console.log('📤 Enviando mensagem...');
-console.log('🔗 URL:', url.substring(0, 80) + '...');
-
-// Faz a requisição SEM bibliotecas externas
-const req = https.get(url, (res) => {
-  console.log('✅ RESPOSTA RECEBIDA!');
-  console.log('Status:', res.statusCode);
-  
-  let data = '';
-  res.on('data', (chunk) => {
-    data += chunk;
-  });
-  
-  res.on('end', () => {
-    console.log('Resposta completa:', data);
-    console.log('📱 Se funcionou, você deve receber a mensagem no WhatsApp!');
-  });
-});
-
-req.on('error', (error) => {
-  console.log('❌ ERRO NA REQUISIÇÃO:');
-  console.log('Mensagem:', error.message);
-});
-
-req.setTimeout(30000, () => {
-  console.log('❌ TIMEOUT: A requisição demorou mais de 30 segundos');
-  req.destroy();
-});
+testWhatsApp();

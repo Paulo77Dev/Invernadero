@@ -1,5 +1,3 @@
-// App.jsx (VERSÃO COMPLETA - TODAS AÇÕES FUNCIONANDO)
-
 // Importações React e componentes
 import React, { useEffect, useState, useRef } from 'react';
 import styles from './styles/App.module.css';
