@@ -1,3 +1,6 @@
+// App.jsx (VERSÃO COMPLETA - TODAS AÇÕES FUNCIONANDO)
+
+// Importações React e componentes
 import React, { useEffect, useState, useRef } from 'react';
 import styles from './styles/App.module.css';
 import Header from './components/Header/Header';
@@ -7,11 +10,15 @@ import ControlButton from './components/ControlButton/ControlButton';
 import EventLog from './components/EventLog/EventLog';
 import TimeSeriesChart from './components/TimeSeriesChart/TimeSeriesChart';
 import ExportModal from './components/ExportModal/ExportModal';
-import { fetchSensors, sendControl } from './services/espService';
+
+// Serviços para comunicação com ESP e envio de alertas
+import { fetchSensors, sendControl, reportAlertToServer } from './services/espService';
 import { FaTemperatureHigh, FaTint, FaWater } from 'react-icons/fa';
 
 const MAX_HISTORY = 300;
 const HISTORY_KEY = 'sensor_history_v1';
+const HUMIDITY_ALERT_THRESHOLD = 80; // Limite de alerta de humidade ALTA
+const HUMIDITY_LOW_ALERT_THRESHOLD = 50; // Limite de alerta de humidade BAIXA
 
 function App() {
   const [mode, setMode] = useState('manual');
@@ -25,47 +32,107 @@ function App() {
   const [history, setHistory] = useState([]);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const prevModeRef = useRef(mode);
-
   const [isPaused, setIsPaused] = useState(false);
-
-  const sendPushNotification = async (type, level, message) => {
-    try {
-      const useMockServer = import.meta.env.VITE_USE_MOCK_SERVER === "true";
-      const token = import.meta.env.VITE_PUSHBULLET_TOKEN || "o.QjW0w3GZtHAWMqOyBYaCbrD8PD41u7LI";
-
-      if (useMockServer) {
-        const url = `${import.meta.env.VITE_ESP_URL || "http://localhost:3001"}/report/alert`;
-        const payload = { type, level, message };
-        const headers = { "Content-Type": "application/json" };
-        const reportKey = import.meta.env.VITE_REPORT_API_KEY || "";
-        if (reportKey) headers["x-api-key"] = reportKey;
-        const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(payload) });
-        if (!res.ok) { console.warn("sendPushNotification (mock): resposta não OK", res.status); } 
-        else { console.log("🧪 Notificação mock enviada:", message); }
-      } else {
-        const resp = await fetch("https://api.pushbullet.com/v2/pushes", {
-          method: "POST",
-          headers: { "Access-Token": token, "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "note", title: `[${level.toUpperCase()}] ${type}`, body: message }),
-        });
-        if (!resp.ok) { console.warn("sendPushNotification (pushbullet): erro HTTP", resp.status); } 
-        else { console.log("📲 Notificação Pushbullet enviada:", message); }
-      }
-    } catch (e) {
-      console.error("🚫 Falha ao enviar notificação:", e);
-    }
-  };
+  const humidityAlertSent = useRef(false);
+  const humidityLowAlertSent = useRef(false);
 
   const addEvent = (message, type = 'info', meta = {}) => {
-    const newEvent = { message, type, meta, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) };
+    const newEvent = {
+      message,
+      type,
+      meta,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    };
     setEvents(prev => [newEvent, ...prev].slice(0, 50));
-    if (type === 'error' || type === 'warning') {
-      const level = type === 'error' ? 'critical' : 'warning';
-      sendPushNotification(type, level, message);
+
+    // 👇 NOTIFICAÇÕES SIMPLIFICADAS - TODAS AÇÕES CONFIGURADAS
+    // PARADA DE EMERGÊNCIA - Apenas UMA notificação
+    if (message.includes('PARADA DE EMERGENCIA ATIVADA')) {
+      reportAlertToServer({
+        type: 'emergency_stop',
+        level: 'critical',
+        message: '🚨 PARADA DE EMERGÊNCIA ATIVADA - Sistema em modo de emergência!'
+      }).catch(err => console.error('Falha notificação emergência:', err));
     }
-    if (type === 'action') {
-      const metaText = meta && Object.keys(meta).length ? ' | ' + Object.entries(meta).map(([k,v]) => `${k}: ${v}`).join(', ') : '';
-      sendPushNotification('activity', 'normal', `${message}${metaText}`);
+    
+    // MUDANÇA DE MODO - Apenas UMA notificação
+    else if (message.includes('Modo alterado')) {
+      const formattedMessage = `NORMAL OPERATIONS\n${message} ${newEvent.time}`;
+      reportAlertToServer({
+        type: 'normal_operations',
+        level: 'info',
+        message: formattedMessage
+      }).catch(err => console.error('Falha notificação modo:', err));
+    }
+    
+    // PAUSA/RETOMADA - Apenas UMA notificação
+    else if (message.includes('Sistema pausado') || message.includes('Sistema retomado')) {
+      const acao = message.includes('pausado') ? 'PAUSADO' : 'RETOMADO';
+      reportAlertToServer({
+        type: 'system_status',
+        level: 'warning',
+        message: `⏸️ Sistema ${acao} pelo painel de controle`
+      }).catch(err => console.error('Falha notificação pausa:', err));
+    }
+    
+    // COMANDO DE EMERGÊNCIA ENVIADO - Apenas UMA notificação
+    else if (message.includes('Comando de emergência enviado')) {
+      reportAlertToServer({
+        type: 'emergency_control',
+        level: 'info', 
+        message: '🛑 Comando de emergência executado - Sistemas desligados'
+      }).catch(err => console.error('Falha notificação controle emergência:', err));
+    }
+    
+    // HISTÓRICO LIMPO
+    else if (message.includes('Histórico limpo')) {
+      reportAlertToServer({
+        type: 'system_action',
+        level: 'info',
+        message: '🗑️ Histórico de dados limpo pelo usuário'
+      }).catch(err => console.error('Falha notificação histórico:', err));
+    }
+    
+    // EXPORTAÇÃO CSV
+    else if (message.includes('Exportação de CSV iniciada')) {
+      reportAlertToServer({
+        type: 'system_action', 
+        level: 'info',
+        message: '📊 Exportação de dados CSV iniciada'
+      }).catch(err => console.error('Falha notificação exportação:', err));
+    }
+    
+    // ENVIAR CONTROLES (BOMBA, VENTILADORES, LUZES)
+    else if (message.includes('Comando enviado -> BOMBA DE RIEGO')) {
+      // Extrai os valores da mensagem
+      const bomba = message.match(/BOMBA DE RIEGO: (\d+)%/)?.[1] || '0';
+      const ventiladores = message.match(/AFICIONADOS: (\d+)%/)?.[1] || '0';
+      const luzes = message.includes('LUCES: true') ? 'LIGADAS' : 'DESLIGADAS';
+      const modo = message.match(/Modo: (\w+)/)?.[1] || 'manual';
+      
+      reportAlertToServer({
+        type: 'control_action',
+        level: 'info',
+        message: `🎛️ Controles enviados - Bomba: ${bomba}%, Ventiladores: ${ventiladores}%, Luzes: ${luzes}, Modo: ${modo}`
+      }).catch(err => console.error('Falha notificação controles:', err));
+    }
+    
+    // 👇 ALERTAS DE HUMIDADE - MANTIDOS (são importantes)
+    else if (message.includes('ALERTA: Humidade alta detectada')) {
+      const humidityValue = message.match(/(\d+)%/)?.[1] || 'unknown';
+      reportAlertToServer({
+        type: 'humidity_high',
+        level: 'warning',
+        message: `⚠️ ALERTA: Humidade ALTA detectada - ${humidityValue}% (acima de ${HUMIDITY_ALERT_THRESHOLD}%)`
+      }).catch(err => console.error('Falha notificação humidade alta:', err));
+    }
+    else if (message.includes('ALERTA: Humidade baixa detectada')) {
+      const humidityValue = message.match(/(\d+)%/)?.[1] || 'unknown';
+      reportAlertToServer({
+        type: 'humidity_low',
+        level: 'warning',
+        message: `🔻 ALERTA: Humidade BAIXA detectada - ${humidityValue}% (abaixo de ${HUMIDITY_LOW_ALERT_THRESHOLD}%)`
+      }).catch(err => console.error('Falha notificação humidade baixa:', err));
     }
   };
 
@@ -76,11 +143,7 @@ function App() {
       return;
     }
     setMode(newMode);
-    const readablePrev = String(prev);
-    const readableNew = String(newMode);
-    const msg = `Modo alterado: ${readablePrev} → ${readableNew}`;
-    addEvent(msg, 'action', { from: readablePrev, to: readableNew });
-    sendPushNotification('modeChanged', 'normal', msg);
+    addEvent(`Modo alterado: ${prev} → ${newMode}`, 'action', { from: prev, to: newMode });
     prevModeRef.current = newMode;
   };
 
@@ -88,50 +151,45 @@ function App() {
     try {
       const payload = { mode, irrigation: Number(irrigation), fans: Number(fans), lights: !!lights };
       await sendControl(payload);
-      const logMessage = `Comando enviado -> BOMBA DE RIEGO: ${payload.irrigation}%, AFICIONADOS: ${payload.fans}%, LUCES: ${payload.lights ? 'ON' : 'OFF'}, Modo: ${payload.mode}`;
-      addEvent(logMessage, 'action', { BOMBA_DE_RIEGO: payload.irrigation, AFICIONADOS: payload.fans, LUCES: payload.lights, MODO: payload.mode });
-      sendPushNotification('controlsSent', 'normal', `Controles enviados | BOMBA: ${payload.irrigation}% | AFICIONADOS: ${payload.fans}% | LUCES: ${payload.lights ? 'ON' : 'OFF'}`);
+      addEvent(`Comando enviado -> BOMBA DE RIEGO: ${payload.irrigation}%, AFICIONADOS: ${payload.fans}%, LUCES: ${payload.lights ? 'ON' : 'OFF'}, Modo: ${payload.mode}`, 
+        'action', { BOMBA_DE_RIEGO: payload.irrigation, AFICIONADOS: payload.fans, LUCES: payload.lights, MODO: payload.mode });
     } catch (e) {
       addEvent("Erro ao enviar o controle para o ESP", 'error');
-      sendPushNotification('controlsError', 'critical', 'Erro ao enviar controles ao ESP');
     }
   };
 
+  // Botão de emergência
   const handleEmergencyStop = async () => {
     addEvent("PARADA DE EMERGENCIA ATIVADA", 'warning');
+
     setIrrigation(0); setFans(0); setLights(false); changeMode('manual');
     try {
       await sendControl({ mode: 'manual', irrigation: 0, fans: 0, lights: false });
       addEvent("Comando de emergência enviado", 'action', { BOMBA_DE_RIEGO: 0, AFICIONADOS: 0, LUCES: false, MODO: 'manual' });
-      sendPushNotification('emergency', 'critical', 'Parada de emergencia enviada ao ESP');
-    } catch (e) { 
-      addEvent("Falha ao enviar emergência", 'error'); 
-      sendPushNotification('emergencyError', 'critical', 'Falha ao enviar parada de emergencia');
+    } catch (e) {
+      addEvent("Falha ao enviar emergência", 'error');
     }
   };
 
+  // Botão Pausar / Retomar
   const handlePauseToggle = async () => {
     const newPauseState = !isPaused;
     setIsPaused(newPauseState);
-    const message = newPauseState ? 'Sistema pausado' : 'Sistema retomado';
-    addEvent(message, 'action', { paused: newPauseState });
-    
+    addEvent(newPauseState ? 'Sistema pausado' : 'Sistema retomado', 'action', { paused: newPauseState });
+
     try {
       await sendControl({ paused: newPauseState });
-      sendPushNotification('pauseToggle', 'normal', `Comando '${message}' enviado ao ESP.`);
     } catch (e) {
       addEvent(`Erro ao enviar comando de pausa/retomada.`, 'error');
-      sendPushNotification('pauseError', 'critical', 'Falha ao pausar/retomar o sistema no ESP.');
       setIsPaused(!newPauseState);
     }
   };
-  
+
   const handleClearHistory = () => {
     setHistory([]);
     addEvent('Histórico limpo', 'action');
-    sendPushNotification('historyCleared', 'normal', 'O histórico foi limpo.');
   };
-  
+
   const handleExport = () => {
     if (!history.length) {
       addEvent('O histórico está vazio. Nada para exportar.', 'warning');
@@ -139,9 +197,9 @@ function App() {
     }
     setIsExportModalOpen(true);
     addEvent('Exportação de CSV iniciada', 'action');
-    sendPushNotification('csvExported', 'normal', `Exportação iniciada. ${history.length} registros.`);
   };
 
+  // Atualização dos sensores - SEM NOTIFICAÇÕES AUTOMÁTICAS
   useEffect(() => {
     let mounted = true;
     const getAndSet = async () => {
@@ -151,7 +209,7 @@ function App() {
         if (!mounted) return;
 
         if (typeof data.is_paused === 'boolean' && data.is_paused !== isPaused) {
-            setIsPaused(data.is_paused);
+          setIsPaused(data.is_paused);
         }
 
         const sample = {
@@ -169,22 +227,47 @@ function App() {
         setWaterLevel(sample.water_level);
         setHistory(prev => [...prev.slice(-MAX_HISTORY + 1), sample]);
 
-        addEvent(
-          `Dados recebidos: T:${sample.temperature ?? '-'}°C H:${sample.humidity ?? '-'}% W:${sample.water_level ?? '-'}%`,
-          'success'
-        );
+        addEvent(`Dados recebidos: T:${sample.temperature ?? '-'}°C H:${sample.humidity ?? '-'}% W:${sample.water_level ?? '-'}%`, 'success');
+
+        // 👇 APENAS ATUALIZA A TELA - NÃO ENVIA NOTIFICAÇÕES AUTOMÁTICAS
+
+        // Lógica de alerta de humidade (ALTA e BAIXA) - MANTIDO
+        if (sample.humidity != null) {
+          // Alerta de humidade ALTA
+          if (sample.humidity > HUMIDITY_ALERT_THRESHOLD && !humidityAlertSent.current) {
+            addEvent(`ALERTA: Humidade alta detectada: ${sample.humidity}%`, 'warning');
+            humidityAlertSent.current = true;
+          } 
+          // Alerta de humidade BAIXA
+          else if (sample.humidity < HUMIDITY_LOW_ALERT_THRESHOLD && !humidityLowAlertSent.current) {
+            addEvent(`ALERTA: Humidade baixa detectada: ${sample.humidity}%`, 'warning');
+            humidityLowAlertSent.current = true;
+          }
+          // Normalização da humidade (ambos os casos)
+          else if (
+            (sample.humidity <= HUMIDITY_ALERT_THRESHOLD && humidityAlertSent.current) ||
+            (sample.humidity >= HUMIDITY_LOW_ALERT_THRESHOLD && humidityLowAlertSent.current)
+          ) {
+            if (sample.humidity <= HUMIDITY_ALERT_THRESHOLD && humidityAlertSent.current) {
+              addEvent(`Humidade alta normalizada: ${sample.humidity}%`, 'info');
+              humidityAlertSent.current = false;
+            }
+            if (sample.humidity >= HUMIDITY_LOW_ALERT_THRESHOLD && humidityLowAlertSent.current) {
+              addEvent(`Humidade baixa normalizada: ${sample.humidity}%`, 'info');
+              humidityLowAlertSent.current = false;
+            }
+          }
+        }
+
       } catch (e) {
         console.warn("fetchSensors erro:", e);
-        const msg = `Falha ao buscar sensores: ${e?.message || 'erro desconhecido'}`;
-        addEvent(msg, 'error');
-        sendPushNotification('sensorFailure', 'critical', msg);
+        addEvent(`Falha ao buscar sensores: ${e?.message || 'erro desconhecido'}`, 'error');
       }
     };
-    
     getAndSet();
     const iv = setInterval(getAndSet, 5000);
     return () => { mounted = false; clearInterval(iv); };
-  }, []); // <<< ÚNICA CORREÇÃO: `isPaused` foi removido daqui
+  }, [isPaused]);
 
   useEffect(() => {
     try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch (e) { console.warn('Erro salvando histórico', e); }
@@ -209,7 +292,7 @@ function App() {
           <Header mode={mode} setMode={changeMode} />
         </div>
         <div className={styles.sensorArea}>
-          <SensorDisplay icon={<FaTemperatureHigh />} label="TEMPERATURA" value={temperature} unit="°C" /> 
+          <SensorDisplay icon={<FaTemperatureHigh />} label="TEMPERATURA" value={temperature} unit="°C" />
           <SensorDisplay icon={<FaTint />} label="HUMEDAD RELATIVA" value={humidity} unit="%" />
           <SensorDisplay icon={<FaWater />} label="NIVEL DEL AGUA" value={waterLevel} unit="%" />
         </div>
@@ -240,12 +323,7 @@ function App() {
           <EventLog events={events} />
         </div>
       </div>
-      {isExportModalOpen && (
-        <ExportModal 
-          history={history} 
-          onClose={() => setIsExportModalOpen(false)} 
-        />
-      )}
+      {isExportModalOpen && <ExportModal history={history} onClose={() => setIsExportModalOpen(false)} />}
     </>
   );
 }
