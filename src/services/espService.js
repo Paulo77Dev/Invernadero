@@ -1,48 +1,72 @@
-// src/services/espService.js
-const ESP_BASE = import.meta.env.VITE_ESP_URL || "http://192.168.4.1";
+// src/services/espService.js — VERSÃO CORRIGIDA
+const API_URL = "http://localhost:4000";
 
-
-export async function fetchSensors() {
-  const res = await fetch(`${ESP_BASE}/sensors`, { method: "GET" });
-  if (!res.ok) throw new Error("Falha fetch sensors: " + res.status);
-  return res.json();
-}
-
-// --- CÓDIGO EDITADO ABAIXO ---
-export async function sendControl(payload) {
-  // payload agora é: { mode, irrigation, fans, lights }
-  const res = await fetch(`${ESP_BASE}/control`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload), // Envia o payload completo como ele vier
-  });
-  if (!res.ok) {
-    const txt = await res.text().catch(()=>null);
-    throw new Error("Falha envio controle: " + res.status + " " + txt);
-  }
-  return res.json();
-}
-// --- FIM DA EDIÇÃO ---
-
-// WebSocket helper: recebe URL ws://...
-export function createSensorWebSocket(wsUrl, onMessage, onOpen, onClose) {
-  let ws;
+/**
+ * safeJson()
+ * Faz parse seguro do JSON retornado
+ */
+async function safeJson(resp) {
   try {
-    ws = new WebSocket(wsUrl);
-  } catch (e) {
-    console.error("WS init fail", e);
-    return { close: ()=>{} };
+    return await resp.json();
+  } catch {
+    return null;
   }
+}
 
-  ws.onopen = (ev) => { if (onOpen) onOpen(ev); };
-  ws.onmessage = (ev) => {
-    try { const data = JSON.parse(ev.data); if (onMessage) onMessage(data); }
-    catch(e){ console.warn("WS parse fail", e); }
-  };
-  ws.onclose = (ev) => { if (onClose) onClose(ev); };
-  ws.onerror = (e) => console.error("WS error", e);
+/**
+ * fetchSensors()
+ * Busca os dados dos sensores
+ */
+export async function fetchSensors() {
+  try {
+    const res = await fetch(`${API_URL}/sensors`, { method: "GET", cache: "no-store" });
+    if (!res.ok) throw new Error(`Falha fetch sensors: ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error("Erro ao buscar sensores:", err);
+    throw err;
+  }
+}
 
-  return {
-    close: () => { try{ ws.close(); }catch{} }
-  };
+/**
+ * sendControl()
+ * Envia comandos de controle (bomba, ventiladores, luzes)
+ */
+export async function sendControl(payload) {
+  try {
+    const res = await fetch(`${API_URL}/control`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(`Falha envio controle: ${res.status}`);
+    return safeJson(res);
+  } catch (err) {
+    console.error("Erro ao enviar controle:", err);
+    throw err;
+  }
+}
+
+/**
+ * reportAlertToServer()
+ * ENVIA PARA O BACKEND QUE ENVIA O WHATSAPP
+ */
+export async function reportAlertToServer(payload) {
+  const { type, level, message } = payload;
+  console.log(`[Notificação] ${type} (${level}): ${message}`);
+
+  try {
+    const res = await fetch(`${API_URL}/alert`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, level, message })
+    });
+    
+    if (!res.ok) throw new Error(`Falha HTTP ${res.status}`);
+    console.log("✅ Notificação enviada para o backend!");
+    return true;
+  } catch (err) {
+    console.error("❌ Erro ao enviar notificação:", err);
+    throw err;
+  }
 }
