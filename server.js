@@ -10,7 +10,7 @@ app.use(express.json());
 app.use(cors());
 
 // 👇 NOVAS ROTAS ADICIONADAS
-app.get('/', (req, res) => {
+app.get('/1/', (req, res) => {
   res.json({ 
     message: '🚀 Estufa Cloud API está funcionando!',
     status: 'online',
