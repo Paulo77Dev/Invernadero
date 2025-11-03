@@ -1,5 +1,5 @@
-// src/services/espService.js - VERSÃO CLOUD
-const CLOUD_API_URL = "https://invernadero.railway.app/api"; // 👈 SUA URL
+// src/services/espService.js - VERSÃO CORRIGIDA
+const CLOUD_API_URL = "https://invernadero.railway.app"; // 👈 SEM /api no final
 
 let authToken = null;
 let currentUser = null;
@@ -15,7 +15,7 @@ export function getCurrentUser() {
 
 export async function loginUser(email, password) {
   try {
-    const response = await fetch(`${CLOUD_API_URL}/login`, {
+    const response = await fetch(`${CLOUD_API_URL}/login`, { // 👈 /login direto
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
@@ -66,7 +66,7 @@ export async function fetchSensors() {
   if (!authToken) throw new Error('Não autenticado - Faça login primeiro');
 
   try {
-    const res = await fetch(`${CLOUD_API_URL}/sensors`, { 
+    const res = await fetch(`${CLOUD_API_URL}/sensors`, { // 👈 /sensors direto
       method: "GET",
       headers: {
         "Authorization": `Bearer ${authToken}`,
@@ -87,7 +87,7 @@ export async function sendControl(payload) {
   if (!authToken) throw new Error('Não autenticado - Faça login primeiro');
 
   try {
-    const res = await fetch(`${CLOUD_API_URL}/control`, {
+    const res = await fetch(`${CLOUD_API_URL}/control`, { // 👈 /control direto
       method: "POST",
       headers: { 
         "Authorization": `Bearer ${authToken}`,
@@ -118,7 +118,7 @@ export async function reportAlertToServer(payload) {
   }
 
   try {
-    const res = await fetch(`${CLOUD_API_URL}/alert`, {
+    const res = await fetch(`${CLOUD_API_URL}/alert`, { // 👈 /alert direto
       method: "POST",
       headers: { 
         "Authorization": `Bearer ${authToken}`,
@@ -157,7 +157,7 @@ export async function checkCloudConnection() {
 // 👇 ENVIAR DADOS DO ESP32 PARA CLOUD (PARA O ESP32 USAR)
 export async function sendDeviceData(deviceData) {
   try {
-    const res = await fetch(`${CLOUD_API_URL}/device/data`, {
+    const res = await fetch(`${CLOUD_API_URL}/device/data`, { // 👈 /device/data direto
       method: "POST",
       headers: { 
         "Content-Type": "application/json"
