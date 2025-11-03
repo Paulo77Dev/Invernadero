@@ -197,3 +197,18 @@ app.listen(process.env.PORT || 4000, () => {
   console.log(`🚀 Servidor Cloud Estufa rodando na porta ${process.env.PORT || 4000}`);
   console.log(`📧 Login: admin@estufa.com | Senha: 123456`);
 });
+
+
+// Rota raiz para teste
+app.get('/', (req, res) => {
+  res.json({ 
+    message: '🚀 Estufa Cloud API está funcionando!',
+    endpoints: {
+      health: '/api/health',
+      login: '/api/login', 
+      sensors: '/api/sensors',
+      control: '/api/control'
+    },
+    timestamp: new Date().toISOString()
+  });
+});
