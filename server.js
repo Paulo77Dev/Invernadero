@@ -9,7 +9,6 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-const PROXY_PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || 'seu_segredo_super_secreto_aqui';
 const CALLMEBOT_KEY = process.env.CALLMEBOT_APIKEY;
 const CALLMEBOT_PHONE = process.env.CALLMEBOT_PHONE;
@@ -185,7 +184,7 @@ app.post('/api/alert', authenticateToken, async (req, res) => {
   res.json({ ok: true });
 });
 
-// 👇 ROTA DE SAÚDE
+// 👇 ROTA DE SAÚDE 
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok', 
@@ -194,8 +193,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-app.listen(PROXY_PORT, () => {
-  console.log(`🚀 Servidor Cloud Estufa rodando em http://localhost:${PROXY_PORT}`);
+app.listen(process.env.PORT || 4000, () => {
+  console.log(`🚀 Servidor Cloud Estufa rodando na porta ${process.env.PORT || 4000}`);
   console.log(`📧 Login: admin@estufa.com | Senha: 123456`);
-  console.log(`🔐 JWT Secret: ${JWT_SECRET}`);
 });
