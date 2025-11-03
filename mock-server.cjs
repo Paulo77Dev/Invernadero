@@ -1,57 +1,73 @@
-// mock-server.cjs
-// Node.js mock server com Pushbullet alerts (CommonJS)
-// Run: node mock-server.cjs
-
+// mock-server.cjs - VERSÃO DEBUG
 require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const cors = require('cors');
 const axios = require('axios');
-const { error } = require('console');
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: '*', methods: ['GET', 'POST'], allowedHeaders: ['Content-Type', 'x-api-key'] }));
 app.use(express.json());
 
-const port = process.env.PORT || 3001;
+const port = Number(process.env.PORT) || 4000;
 
-const PUSH_TOKEN = process.env.PUSHBULLET_TOKEN || "o.QjW0w3GZtHAWMqOyBYaCbrD8PD41u7LI";
-if (!PUSH_TOKEN) console.warn("⚠️ PUSHBULLET_TOKEN não definido. Notificações push estarão desativadas.");
+// CALLMEBOT config
+const CALLMEBOT_APIKEY = process.env.CALLMEBOT_APIKEY || "";
+const PHONE_NUMBER = process.env.CALLMEBOT_PHONE || "";
 
-// função verbosa para enviar push (logs úteis para debug)
-async function sendPush(title, body) {
-  if (!PUSH_TOKEN) {
-    console.log("[push] token ausente, ignorando envio:", title, body);
-    return;
+console.log('🔧 [DEBUG] Configuração WhatsApp:', {
+  hasApiKey: !!CALLMEBOT_APIKEY,
+  hasPhone: !!PHONE_NUMBER,
+  phone: PHONE_NUMBER ? '***' + PHONE_NUMBER.slice(-4) : 'não definido',
+  apiKey: CALLMEBOT_APIKEY ? '***' + CALLMEBOT_APIKEY.slice(-4) : 'não definido'
+});
+
+async function sendWhatsApp(message) {
+  if (!CALLMEBOT_APIKEY || !PHONE_NUMBER) {
+    console.log("❌ [DEBUG] Credenciais ausentes -> ignorando envio");
+    throw new Error("Credenciais WhatsApp não configuradas");
   }
+  
+  const url = `https://api.callmebot.com/whatsapp.php?phone=${PHONE_NUMBER}&text=${encodeURIComponent(message)}&apikey=${CALLMEBOT_APIKEY}`;
+  
+  console.log('📤 [DEBUG] Tentando enviar WhatsApp:', message);
+  console.log('🔗 [DEBUG] URL:', url.substring(0, 100) + '...');
+  
   try {
-    console.log("[push] POST https://api.pushbullet.com/v2/pushes ->", { title, body });
-    const resp = await axios.post(
-      "https://api.pushbullet.com/v2/pushes",
-      { type: "note", title, body },
-      { headers: { "Access-Token": PUSH_TOKEN, "Content-Type": "application/json" }, timeout: 10000 }
-    );
-    console.log("✅ Push enviado:", title, "status:", resp.status);
-    if (resp.data) console.log("push response:", JSON.stringify(resp.data, null, 2));
-    return resp.data;
+    const res = await axios.get(url, { 
+      timeout: 30000,
+      validateStatus: function (status) {
+        return status >= 200 && status < 500;
+      }
+    });
+    
+    console.log("✅ [DEBUG] Resposta da API:", {
+      status: res.status,
+      data: res.data,
+      headers: res.headers
+    });
+    
+    // 👇 VERIFICAÇÃO ESPECÍFICA DO STATUS
+    if (res.status === 200 || res.status === 209) {
+      console.log('🎉 [DEBUG] MENSAGEM ENVIADA COM SUCESSO! Status:', res.status);
+    } else {
+      console.log('⚠️ [DEBUG] Status inesperado:', res.status);
+    }
+    
+    return res.data;
   } catch (err) {
-    const status = err.response?.status;
-    const data = err.response?.data;
-    console.error("❌ Falha ao enviar push:", status || err.code || err.message);
-    if (data) console.error("response.data:", JSON.stringify(data, null, 2));
-    else console.error(err.stack?.split("\n").slice(0,4).join("\n"));
-    throw error;
+    console.error("❌ [DEBUG] ERRO AO ENVIAR:", {
+      message: err.message,
+      code: err.code,
+      response: err.response?.data,
+      status: err.response?.status
+    });
+    throw err;
   }
 }
 
-// opcional: listar devices (útil para checar que o token vê o celular)
-// NÃO chame automaticamente em produção; só pra debug.
-// async function listDevices() { ... }
-
-//
-// --- Simulação / endpoints (mantive o que já tinhas) ---
-//
+// --- mock sensors ---
 let t0 = Date.now();
 function simulate(now = Date.now()) {
   const s = (now - t0) / 1000;
@@ -64,99 +80,109 @@ function simulate(now = Date.now()) {
     ts: new Date().toISOString(),
     temperature: Number(temp.toFixed(2)),
     humidity: Number(hum.toFixed(2)),
-    water_level: Number(Math.max(0, Math.min(100, water.toFixed(2)))),
+    water_level: Number(Math.max(0, Math.min(100, Number(water.toFixed(2))))),
     battery: Number(battery.toFixed(3))
   };
 }
 
 let current = simulate();
 
-app.get('/sensors', (req, res) => res.json(current));
-
-app.post('/control', (req, res) => {
-  console.log('control recebido:', req.body);
-  res.json({ ok: true, received: req.body });
+app.get('/sensors', (req, res) => {
+  console.log('📡 [DEBUG] /sensors requisitado');
+  res.json(current);
 });
 
-app.get('/health', (req, res) => res.send('ok'));
+app.post('/control', async (req, res) => {
+  console.log('🎮 [DEBUG] /control recebido:', JSON.stringify(req.body));
+  const reqBody = req.body;
+  const control = { ...reqBody, ...(reqBody.payload || {}) };
 
-app.post('/inject/spike', (req, res) => {
-  const { field, value, durationSec = 5 } = req.body || {};
-  if (!field) return res.status(400).json({ error: 'field required' });
-  if (!(field in current)) return res.status(400).json({ error: 'field not found on current data' });
-  const original = current[field];
-  current[field] = value;
-  setTimeout(() => { current[field] = original; }, durationSec * 1000);
-  console.log(`[inject] field=${field} value=${value} durationSec=${durationSec}`);
-  res.json({ ok: true, field, value, durationSec });
+  broadcast({ type: 'control', payload: control });
+
+  res.json({ ok: true, received: reqBody });
 });
 
-app.post('/test/push', async (req, res) => {
-  const { title = "Teste", body = "Mensagem de teste" } = req.body || {};
-  try {
-    await sendPush(title, body);
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+// ROTA PARA ALERTAS CallMeBot - COM DEBUG COMPLETO
+app.post('/alert', async (req, res) => {
+  console.log('📨 [DEBUG] /alert recebido:', JSON.stringify(req.body, null, 2));
+  const { type, level, message } = req.body;
+
+  let whatsappMessage = "";
+
+  // Formata a mensagem conforme o tipo
+  if (type === 'emergency_stop' && level === 'critical') {
+    whatsappMessage = `🛑 ALERTA CRÍTICO: ${message}`;
+  } else if (type === 'system_paused' || type === 'system_resumed') {
+    const emoji = type === 'system_paused' ? '⏸️' : '▶️';
+    whatsappMessage = `${emoji} ${message}`;
+  } else if (type === 'humidity_high') {
+    whatsappMessage = `⚠️ ALERTA DE HUMIDADE ALTA: ${message}`;
+  } else if (type === 'humidity_low') {
+    whatsappMessage = `🔻 ALERTA DE HUMIDADE BAIXA: ${message}`;
+  } else if (type === 'normal_operations' || type === 'sensor_data') {
+    whatsappMessage = `🌱 ${message}`;
+  } else if (message) {
+    whatsappMessage = `📋 ${message}`;
+  } else {
+    console.log('❌ [DEBUG] Dados de alerta inválidos');
+    return res.status(400).json({ ok: false, error: "Dados de alerta inválidos." });
   }
-});
 
-//
-// --- REPORT ALERT endpoint (seguro por API key opcional) ---
-//
-const ALERT_REPORT_COOLDOWN_MS = Number(process.env.ALERT_REPORT_COOLDOWN_MS) || 60_000;
-const REPORT_API_KEY = process.env.REPORT_API_KEY || ""; // se definido, UI deve enviar header x-api-key
-const reportLastAt = {}; // map type -> timestamp
+  console.log('🔄 [DEBUG] Processando notificação WhatsApp:', whatsappMessage);
 
-app.post('/report/alert', async (req, res) => {
   try {
-    // se houver REPORT_API_KEY configurada, exige cabeçalho x-api-key igual
-    if (REPORT_API_KEY) {
-      const key = req.headers['x-api-key'] || req.headers['X-API-KEY'] || req.headers['x_api_key'];
-      if (!key || key !== REPORT_API_KEY) {
-        return res.status(401).json({ ok: false, error: 'unauthorized (invalid x-api-key)' });
-      }
-    }
-
-    const payload = req.body || {};
-    const { type = 'reported', level = 'warning', message = '', sample = null } = payload;
-
-    const now = Date.now();
-    const last = reportLastAt[type] || 0;
-    if (now - last < ALERT_REPORT_COOLDOWN_MS) {
-      return res.json({ ok: true, skipped: true, reason: 'cooldown' });
-    }
-    reportLastAt[type] = now;
-
-    const title = level === 'critical' ? `⚠️ CRÍTICO: ${type}` : `⚠️ Alerta: ${type}`;
-    const body = `${message || `Evento ${type} reportado pelo frontend`}${sample ? `\n\nSample: ${JSON.stringify(sample)}` : ''}`;
-
-    try {
-      await sendPush(title, body);
-      console.log(`[report] alert sent type=${type} level=${level}`);
-      return res.json({ ok: true, sent: true });
-    } catch (e) {
-      console.warn('[report] erro ao enviar push', e?.message || e);
-      return res.status(500).json({ ok: false, error: String(e?.message || e) });
-    }
-
+    const result = await sendWhatsApp(whatsappMessage);
+    console.log('✅ [DEBUG] Notificação enviada com sucesso!');
+    res.json({ ok: true, sent: true, result });
   } catch (err) {
-    console.error('/report/alert handler error', err);
-    res.status(500).json({ ok: false, error: String(err?.message || err) });
+    console.error('❌ [DEBUG] ERRO ao enviar notificação:', err.message);
+    res.status(500).json({ 
+      ok: false, 
+      error: "Falha ao enviar WhatsApp",
+      details: err.message 
+    });
   }
 });
 
-//
-// --- WebSocket + broadcast + alerts automáticos do mock ---
-//
+app.get('/health', (req, res) => res.json({ 
+  status: 'ok', 
+  whatsapp: {
+    configured: !!(CALLMEBOT_APIKEY && PHONE_NUMBER),
+    apiKey: CALLMEBOT_APIKEY ? '***' + CALLMEBOT_APIKEY.slice(-4) : 'não definido',
+    phone: PHONE_NUMBER ? '***' + PHONE_NUMBER.slice(-4) : 'não definido'
+  }
+}));
+
+app.post('/test/whatsapp', async (req, res) => {
+  const { message = "✅ TESTE DEBUG: Sistema funcionando!" } = req.body || {};
+  console.log('🧪 [DEBUG] Teste WhatsApp solicitado:', message);
+  
+  try {
+    const result = await sendWhatsApp(message);
+    return res.json({ 
+      ok: true, 
+      message: "Teste enviado com sucesso",
+      result 
+    });
+  } catch (err) {
+    console.error("❌ [DEBUG] Teste WhatsApp falhou:", err.message);
+    return res.status(500).json({ 
+      ok: false, 
+      error: "Falha no teste",
+      details: err.message 
+    });
+  }
+});
+
+// WebSocket
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 wss.on('connection', (ws) => {
-  console.log('WS client connected');
+  console.log('🔌 [DEBUG] WS client connected');
   ws.send(JSON.stringify({ type: 'init', payload: current }));
-  ws.on('message', (msg) => console.log('WS msg from client:', msg.toString().slice(0,200)));
-  ws.on('close', () => console.log('WS client disconnected'));
+  ws.on('message', (msg) => console.log('📩 [DEBUG] WS msg from client:', msg.toString().slice(0,200)));
+  ws.on('close', () => console.log('🔌 [DEBUG] WS client disconnected'));
 });
 
 function broadcast(data) {
@@ -166,73 +192,26 @@ function broadcast(data) {
   });
 }
 
-const INTERVAL_MS = Number(process.env.INTERVAL_MS) || 1000;
-let lastUpdate = Date.now();
-
-// thresholds configuráveis via .env
-const INACTIVITY_THRESHOLD_MS = Number(process.env.INACTIVITY_THRESHOLD_MS) || 10_000;
-const INACTIVITY_COOLDOWN_MS = Number(process.env.INACTIVITY_COOLDOWN_MS) || 60_000;
-
-const TEMP_THRESHOLD = Number(process.env.TEMP_THRESHOLD) || 35;
-const TEMP_COOLDOWN_MS = Number(process.env.TEMP_COOLDOWN_MS) || 5 * 60_000;
-
-const WATER_THRESHOLD = Number(process.env.WATER_THRESHOLD) || 20;
-const WATER_COOLDOWN_MS = Number(process.env.WATER_COOLDOWN_MS) || 5 * 60_000;
-
-const lastAlertAt = { inactivity: 0, tempHigh: 0, waterLow: 0 };
-
-// loop principal do mock
+const INTERVAL_MS = Number(process.env.INTERVAL_MS) || 5000;
 setInterval(() => {
   current = simulate();
-  lastUpdate = Date.now();
   broadcast({ type: 'sensors', payload: current });
-
-  const now = Date.now();
-
-  // temperatura
-  try {
-    if (current.temperature != null) {
-      if (current.temperature > TEMP_THRESHOLD && (now - lastAlertAt.tempHigh) > TEMP_COOLDOWN_MS) {
-        const title = "🔥 Alerta: temperatura alta";
-        const body = `Dispositivo ${current.device_id}: temperatura ${current.temperature} °C (limite ${TEMP_THRESHOLD} °C).`;
-        sendPush(title, body).catch(()=>{});
-        console.log("[alert] tempHigh sent:", body);
-        lastAlertAt.tempHigh = now;
-      }
-    }
-  } catch (e) { console.warn("Erro ao checar temperatura para alertas:", e); }
-
-  // água
-  try {
-    if (current.water_level != null) {
-      if (current.water_level < WATER_THRESHOLD && (now - lastAlertAt.waterLow) > WATER_COOLDOWN_MS) {
-        const title = "💧 Alerta: nível de água baixo";
-        const body = `Dispositivo ${current.device_id}: nível de água ${current.water_level}% (limite ${WATER_THRESHOLD}%).`;
-        sendPush(title, body).catch(()=>{});
-        console.log("[alert] waterLow sent:", body);
-        lastAlertAt.waterLow = now;
-      }
-    }
-  } catch (e) { console.warn("Erro ao checar nível de água para alertas:", e); }
-
 }, INTERVAL_MS);
 
-// inatividade
-setInterval(() => {
-  const now = Date.now();
-  if ((now - lastUpdate) > INACTIVITY_THRESHOLD_MS) {
-    if ((now - lastAlertAt.inactivity) > INACTIVITY_COOLDOWN_MS) {
-      const title = "⚠️ Falha de comunicação";
-      const body = `Nenhuma atualização recebida do dispositivo ${current.device_id} há ${(now - lastUpdate)/1000}s.`;
-      sendPush(title, body).catch(()=>{});
-      console.log("[alert] inactivity sent:", body);
-      lastAlertAt.inactivity = now;
-    }
-  }
-}, 5000);
-
-server.listen(port, () => {
-  console.log(`Mock server running at http://localhost:${port}`);
-  console.log(`WS endpoint ws://localhost:${port}`);
-  // DEBUG: listDevices() se quiser (descomente e chame uma vez)
+server.listen(port, '0.0.0.0', () => {
+  console.log(`🚀 [DEBUG] Mock server running at http://0.0.0.0:${port}`);
+  console.log(`📡 [DEBUG] WS endpoint ws://0.0.0.0:${port}`);
+  console.log(`🔧 [DEBUG] WhatsApp: ${CALLMEBOT_APIKEY && PHONE_NUMBER ? 'CONFIGURADO' : 'NÃO CONFIGURADO'}`);
+  
+  // 👇 TESTE AUTOMÁTICO AO INICIAR
+  console.log('🧪 [DEBUG] Executando teste automático...');
+  setTimeout(() => {
+    axios.post(`http://localhost:${port}/test/whatsapp`, {
+      message: "🔧 TESTE AUTOMÁTICO: Servidor iniciado com sucesso!"
+    }).then(response => {
+      console.log('✅ [DEBUG] Teste automático executado:', response.data);
+    }).catch(err => {
+      console.error('❌ [DEBUG] Teste automático falhou:', err.message);
+    });
+  }, 2000);
 });
