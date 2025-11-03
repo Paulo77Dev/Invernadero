@@ -26,6 +26,16 @@ app.get('/health', (req, res) => {
   });
 });
 
+// 👇 ROTA DE SAÚDE PARA /api/health (NOVA)
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    service: 'estufa-cloud',
+    endpoint: '/api/health',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // 👇 ROTA SIMPLES PARA TESTE
 app.get('/api/test', (req, res) => {
   res.json({ 
