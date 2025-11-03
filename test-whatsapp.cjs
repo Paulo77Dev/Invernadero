@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 // test-whatsapp.cjs - NÃO PRECISA DE INSTALAÇÃO
+=======
+// teste-whatsapp-simples.js - NÃO PRECISA DE INSTALAÇÃO
+>>>>>>> a1baa8bdd60e2ad88517ade5900ba8fdd49ef31b
 require('dotenv').config();
 const https = require('https');
 
