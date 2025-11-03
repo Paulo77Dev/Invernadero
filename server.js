@@ -9,6 +9,24 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+// 👇 NOVAS ROTAS ADICIONADAS
+app.get('/', (req, res) => {
+  res.json({ 
+    message: '🚀 Estufa Cloud API está funcionando!',
+    status: 'online',
+    service: 'estufa-cloud',
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    service: 'estufa-cloud',
+    timestamp: new Date().toISOString()
+  });
+});
+
 const JWT_SECRET = process.env.JWT_SECRET || 'seu_segredo_super_secreto_aqui';
 const CALLMEBOT_KEY = process.env.CALLMEBOT_APIKEY;
 const CALLMEBOT_PHONE = process.env.CALLMEBOT_PHONE;
@@ -184,7 +202,7 @@ app.post('/api/alert', authenticateToken, async (req, res) => {
   res.json({ ok: true });
 });
 
-// 👇 ROTA DE SAÚDE 
+// 👇 ROTA DE SAÚDE
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok', 
@@ -196,19 +214,4 @@ app.get('/api/health', (req, res) => {
 app.listen(process.env.PORT || 4000, () => {
   console.log(`🚀 Servidor Cloud Estufa rodando na porta ${process.env.PORT || 4000}`);
   console.log(`📧 Login: admin@estufa.com | Senha: 123456`);
-});
-
-
-// Rota raiz para teste
-app.get('/', (req, res) => {
-  res.json({ 
-    message: '🚀 Estufa Cloud API está funcionando!',
-    endpoints: {
-      health: '/api/health',
-      login: '/api/login', 
-      sensors: '/api/sensors',
-      control: '/api/control'
-    },
-    timestamp: new Date().toISOString()
-  });
 });
