@@ -1,5 +1,5 @@
 // src/services/espService.js - VERSÃO CORRIGIDA
-const ESP32_IP = "http://192.168.1.11"; // SEU IP DO ESP32.17(en mi casa)
+const ESP32_IP = "http://192.168.1.13"; // SEU IP DO ESP32.17(en mi casa)
 const API_URL = ESP32_IP;
 
 /**
