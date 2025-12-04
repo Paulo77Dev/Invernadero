@@ -1,102 +1,98 @@
-const express = require('express');
-const fetch = require('node-fetch');
-const cors = require('cors');
-require('dotenv').config();
+import express from "express";
+import cors from "cors";
+import { SerialPort, ReadlineParser } from "serialport";
+import { Server } from "socket.io";
+import http from "http";
+import dotenv from "dotenv";
 
+dotenv.config();
 const app = express();
-app.use(express.json());
 app.use(cors());
+app.use(express.json());
 
-// 👇 ROTA RAIZ - SEMPRE FUNCIONA
-app.get('/', (req, res) => {
-  res.json({ 
-    message: '🚀 Estufa Cloud API está funcionando!',
-    status: 'online',
-    service: 'estufa-cloud',
-    timestamp: new Date().toISOString()
-  });
-});
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
 
-// 👇 ROTA DE SAÚDE
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    service: 'estufa-cloud',
-    timestamp: new Date().toISOString()
-  });
-});
+// Puerto serial
+const SERIAL_PORT = process.env.SERIAL_PORT || "COM10";
+const SERIAL_BAUD = 115200;
 
-// 👇 ROTA DE SAÚDE PARA /api/health (NOVA)
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    service: 'estufa-cloud',
-    endpoint: '/api/health',
-    timestamp: new Date().toISOString()
-  });
-});
+let lastData = {
+  water_level: 0,
+  temperature: 0,
+  humidity: 0,
+  ts: new Date().toISOString(),
+};
 
-// 👇 ROTA SIMPLES PARA TESTE
-app.get('/api/test', (req, res) => {
-  res.json({ 
-    message: '✅ API test route working!',
-    data: { temperature: 25, humidity: 60 },
-    timestamp: new Date().toISOString()
-  });
-});
+const port = new SerialPort({ path: SERIAL_PORT, baudRate: SERIAL_BAUD });
+const parser = new ReadlineParser();
+port.pipe(parser);
 
-// 👇 ROTA PARA ESP32 ENVIAR DADOS
-app.post('/api/device/data', (req, res) => {
-  const { deviceId, temperature, humidity, waterLevel } = req.body;
-  
-  console.log(`📊 Dados recebidos de ${deviceId || 'unknown'}:`, { 
-    temperature, 
-    humidity, 
-    waterLevel 
-  });
-  
-  res.json({ 
-    status: 'success', 
-    message: 'Dados recebidos na cloud',
-    received: { deviceId, temperature, humidity, waterLevel }
-  });
-});
+port.on("open", () =>
+  console.log(`🔌 Puerto serial abierto: ${SERIAL_PORT} @ ${SERIAL_BAUD}`)
+);
+port.on("error", (err) => console.error("❌ Error serial:", err.message));
 
-// 👇 ROTA PARA WHATSAPP (SIMPLIFICADA)
-app.post('/api/alert', async (req, res) => {
-  const { message } = req.body;
-  
-  console.log('📱 Tentando enviar WhatsApp:', message);
-  
-  // Simulação - sempre retorna sucesso por enquanto
-  res.json({ 
-    status: 'success', 
-    message: 'Notificação processada',
-    alert: message
-  });
-});
+// 📥 Lectura de datos desde el Arduino
+parser.on("data", (line) => {
+  console.log("📥 Datos crudos:", line);
+  const regex =
+    /Volume:\s*(\d+)%\s*\|\s*Temp:\s*([\d.]+)\s*°C\s*\|\s*Umidade:\s*([\d.]+)\s*%/;
+  const match = line.match(regex);
 
-// 👇 ROTA DE LOGIN SIMPLES
-app.post('/api/login', (req, res) => {
-  const { email, password } = req.body;
-  
-  if (email === 'admin@estufa.com' && password === '123456') {
-    res.json({ 
-      status: 'success',
-      message: 'Login realizado',
-      user: { name: 'Administrador', email: email }
-    });
-  } else {
-    res.status(401).json({ 
-      status: 'error',
-      message: 'Credenciais inválidas' 
-    });
+  if (match) {
+    lastData = {
+      water_level: Number(match[1]),
+      temperature: Number(match[2]),
+      humidity: Number(match[3]),
+      ts: new Date().toISOString(),
+    };
+    io.emit("sensor_data", lastData); // 🔔 Emite datos a los clientes conectados
   }
 });
 
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor SIMPLES rodando na porta ${PORT}`);
-  console.log(`📧 Login: admin@estufa.com | Senha: 123456`);
-  console.log(`🌐 URL: https://invernadero.railway.app`);
+// 🖥 Endpoint para obtener datos actuales
+app.get("/sensors", (req, res) => res.json(lastData));
+
+// ✅ Acepta `command` o payload completo — sin error 400
+app.post("/control", (req, res) => {
+  console.log("📨 Recibido en backend:", req.body);
+  const { lights, irrigation, fans, mode, paused, command } = req.body;
+  let comandos = [];
+
+  if (command) comandos.push(command);
+
+  if (paused === true) comandos.push("PAUSE");
+  if (paused === false) comandos.push("RESUME");
+
+  if (typeof lights !== "undefined") comandos.push(lights ? "LUZ_ON" : "LUZ_OFF");
+  if (typeof irrigation !== "undefined") comandos.push(`IRRIGACION_${irrigation}`);
+  if (typeof fans !== "undefined") comandos.push(`VENTILADOR_${fans}`);
+  if (typeof mode !== "undefined") comandos.push(`MODO_${mode.toUpperCase()}`);
+
+  if (comandos.length === 0) {
+    console.warn("⚠️ Ningún comando válido recibido:", req.body);
+    return res.status(200).json({ ok: true, comandos: [] }); // ✅ no rompe el frontend
+  }
+
+  const comandoFinal = comandos.join(";");
+  port.write(comandoFinal + "\n", (err) => {
+    if (err) {
+      console.error("❌ Error al enviar comando:", err.message);
+      return res.status(500).json({ error: "Fallo al enviar comando" });
+    }
+    console.log(`📤 Comando(s) enviado(s): ${comandoFinal}`);
+    res.json({ ok: true, comandos });
+  });
 });
+
+// 🏠 Endpoint principal
+app.get("/", (req, res) =>
+  res.json({
+    message: "API del Invernadero en funcionamiento",
+    timestamp: new Date().toISOString(),
+  })
+);
+
+const PORT = process.env.PORT || 4000;
+server.listen(PORT, () => console.log(`🚀 Servidor corriendo en puerto ${PORT}`));

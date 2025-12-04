@@ -1,8 +1,8 @@
-// test-whatsapp.cjs - VERSÃO CORRIGIDA
+// test-whatsapp.cjs
 require('dotenv').config();
 
-const CALLMEBOT_APIKEY = "7758207"; // SUA API KEY ATUAL
-const CALLMEBOT_PHONE = "+573208547840"; // SEU NÚMERO ATUAL
+const CALLMEBOT_APIKEY = "7758207"; //API ATUAL
+const CALLMEBOT_PHONE = "+573208547840"; //NÚMERO ATUAL
 
 async function testWhatsApp() {
   try {

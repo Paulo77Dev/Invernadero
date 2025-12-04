@@ -1,4 +1,4 @@
-// mock-server.cjs - VERSÃO DEBUG
+// mock-server.cjs
 require('dotenv').config();
 const express = require('express');
 const http = require('http');

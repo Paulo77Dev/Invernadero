@@ -1,84 +1,53 @@
-// src/services/espService.js - VERSÃO CORRIGIDA
-const ESP32_IP = "http://192.168.1.11"; // SEU IP DO ESP32.17(en mi casa)
-const API_URL = ESP32_IP;
+const API_URL = "http://localhost:4000";
 
-/**
- * fetchSensors() - Busca dados direto do ESP32
- */
+// ✅ Versión robusta — muestra el estado real de error
 export async function fetchSensors() {
   try {
-    const res = await fetch(`${API_URL}/sensors`, { 
-      method: "GET",
-      timeout: 10000
-    });
-    
-    if (!res.ok) throw new Error(`Falha ao buscar sensores: ${res.status}`);
+    const res = await fetch(`${API_URL}/sensors`);
+    if (!res.ok) throw new Error(`Fallo al obtener sensores: ${res.status}`);
     return await res.json();
   } catch (err) {
-    console.error("Erro ao buscar sensores do ESP32:", err);
-    throw new Error("ESP32 não conectado ou sem resposta");
+    console.error("❌ Error al obtener sensores del backend:", err);
+    throw new Error("Backend no conectado o sin respuesta");
   }
 }
 
-/**
- * sendControl() - Envia comandos direto para ESP32
- */
+// ⚙️ Enviar comandos al backend
 export async function sendControl(payload) {
   try {
     const res = await fetch(`${API_URL}/control`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
-      timeout: 10000
     });
-    
-    if (!res.ok) throw new Error(`Falha ao enviar controle: ${res.status}`);
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Fallo al enviar control: ${res.status} - ${text}`);
+    }
     return await res.json();
   } catch (err) {
-    console.error("Erro ao enviar controle para ESP32:", err);
-    throw new Error("Falha na comunicação com ESP32");
+    console.error("❌ Error al enviar control:", err);
+    throw err;
   }
 }
 
-/**
- * reportAlertToServer() - WhatsApp direto (CallMeBot)
- */
+// 📱 Enviar alertas al servidor / notificaciones
 export async function reportAlertToServer(payload) {
   const { type, level, message } = payload;
-  console.log(`📱 [Notificação] ${type} (${level}): ${message}`);
-
+  console.log(`📱 [Notificación] ${type} (${level}): ${message}`);
   try {
-    // 👇 USE AS CREDENCIAIS CORRETAS!
-    const phone = "+573208547840"; // SEU NÚMERO CORRETO
-    const apikey = "7758207"; // SUA API KEY CORRETA
-    const text = `🌱 ESTUFA INTELIGENTE\n${message}\n⏰ ${new Date().toLocaleString()}`;
-    
-    const url = `https://api.callmebot.com/whatsapp.php?phone=${phone}&text=${encodeURIComponent(text)}&apikey=${apikey}`;
-    
-    console.log('🔗 URL WhatsApp:', url); // 👈 DEBUG
-    
-    // Método que evita CORS
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.src = url;
-      img.onload = () => {
-        console.log("✅ Notificação WhatsApp enviada!");
-        resolve(true);
-      };
-      img.onerror = () => {
-        console.log("✅ Notificação enviada!");
-        resolve(true);
-      };
-    });
-    
+    const phone = "+573208547840";
+    const apikey = "7758207";
+    const text = `🌱 INVERNADERO INTELIGENTE\n${message}\n⏰ ${new Date().toLocaleString()}`;
+    const url = `https://api.callmebot.com/whatsapp.php?phone=${phone}&text=${encodeURIComponent(
+      text
+    )}&apikey=${apikey}`;
+
+    const img = new Image();
+    img.src = url;
+    img.onload = () => console.log("✅ Notificación de WhatsApp enviada!");
+    img.onerror = () => console.log("✅ Notificación enviada!");
   } catch (err) {
-    console.error("❌ Erro ao enviar notificação WhatsApp:", err);
-    
-    // Fallback: notificação do navegador
-    if (Notification.permission === "granted") {
-      new Notification(`🌱 ${type}`, { body: message });
-    }
-    
-    return false;
+    console.error("❌ Error al enviar notificación WhatsApp:", err);
   }
 }

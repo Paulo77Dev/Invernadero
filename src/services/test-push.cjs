@@ -1,4 +1,4 @@
-// test-push.cjs (modo gratuito: envia pra todos os devices da conta)
+// test-push.cjs
 const axios = require('axios');
 const token = process.env.PUSHBULLET_TOKEN || "o.IEz7LnRZZCcWmEeUWjyY8rNaMonm43hP";
 

@@ -1,4 +1,4 @@
-// Importações React e componentes
+// Importaciones de React y componentes
 import React, { useEffect, useState, useRef } from 'react';
 import styles from './styles/App.module.css';
 import Header from './components/Header/Header';
@@ -9,14 +9,14 @@ import EventLog from './components/EventLog/EventLog';
 import TimeSeriesChart from './components/TimeSeriesChart/TimeSeriesChart';
 import ExportModal from './components/ExportModal/ExportModal';
 
-// Serviços para comunicação com ESP e envio de alertas
+// Servicios para comunicación con el backend y notificaciones
 import { fetchSensors, sendControl, reportAlertToServer } from './services/espService';
 import { FaTemperatureHigh, FaTint, FaWater } from 'react-icons/fa';
 
 const MAX_HISTORY = 300;
 const HISTORY_KEY = 'sensor_history_v1';
-const HUMIDITY_ALERT_THRESHOLD = 80; // Limite de alerta de humidade ALTA
-const HUMIDITY_LOW_ALERT_THRESHOLD = 50; // Limite de alerta de humidade BAIXA
+const HUMIDITY_ALERT_THRESHOLD = 70;
+const HUMIDITY_LOW_ALERT_THRESHOLD = 50;
 
 function App() {
   const [mode, setMode] = useState('manual');
@@ -34,252 +34,215 @@ function App() {
   const humidityAlertSent = useRef(false);
   const humidityLowAlertSent = useRef(false);
 
+  // 💬 Función central para logs y notificaciones
   const addEvent = (message, type = 'info', meta = {}) => {
     const newEvent = {
       message,
       type,
       meta,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      time: new Date().toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      }),
     };
-    setEvents(prev => [newEvent, ...prev].slice(0, 50));
+    setEvents((prev) => [newEvent, ...prev].slice(0, 50));
 
-    // 👇 NOTIFICAÇÕES SIMPLIFICADAS - TODAS AÇÕES CONFIGURADAS
-    // PARADA DE EMERGÊNCIA - Apenas UMA notificação
+    // 🔔 Notificaciones automáticas (mantener de la versión antigua)
     if (message.includes('PARADA DE EMERGENCIA ATIVADA')) {
       reportAlertToServer({
         type: 'emergency_stop',
         level: 'critical',
-        message: '🚨 PARADA DE EMERGÊNCIA ATIVADA - Sistema em modo de emergência!'
-      }).catch(err => console.error('Falha notificação emergência:', err));
-    }
-    
-    // MUDANÇA DE MODO - Apenas UMA notificação
-    else if (message.includes('Modo alterado')) {
-      const formattedMessage = `NORMAL OPERATIONS\n${message} ${newEvent.time}`;
+        message: '🚨 PARADA DE EMERGENCIA ACTIVADA - Sistema en modo de emergencia!',
+      });
+    } else if (message.includes('Modo alterado')) {
       reportAlertToServer({
         type: 'normal_operations',
         level: 'info',
-        message: formattedMessage
-      }).catch(err => console.error('Falha notificação modo:', err));
-    }
-    
-    // PAUSA/RETOMADA - Apenas UMA notificação
-    else if (message.includes('Sistema pausado') || message.includes('Sistema retomado')) {
-      const acao = message.includes('pausado') ? 'PAUSADO' : 'RETOMADO';
+        message: `⚙️ ${message}`,
+      });
+    } else if (message.includes('Sistema pausado') || message.includes('Sistema retomado')) {
+      const acao = message.includes('pausado') ? 'PAUSADO' : 'REANUDADO';
       reportAlertToServer({
         type: 'system_status',
         level: 'warning',
-        message: `⏸️ Sistema ${acao} pelo painel de controle`
-      }).catch(err => console.error('Falha notificação pausa:', err));
-    }
-    
-    // COMANDO DE EMERGÊNCIA ENVIADO - Apenas UMA notificação
-    else if (message.includes('Comando de emergência enviado')) {
+        message: `⏸️ Sistema ${acao} desde el panel de control`,
+      });
+    } else if (message.includes('Comando de emergencia enviado')) {
       reportAlertToServer({
         type: 'emergency_control',
-        level: 'info', 
-        message: '🛑 Comando de emergência executado - Sistemas desligados'
-      }).catch(err => console.error('Falha notificação controle emergência:', err));
-    }
-    
-    // HISTÓRICO LIMPO
-    else if (message.includes('Histórico limpo')) {
+        level: 'info',
+        message: '🛑 Comando de emergencia ejecutado - Sistemas apagados',
+      });
+    } else if (message.includes('Histórico limpo')) {
       reportAlertToServer({
         type: 'system_action',
         level: 'info',
-        message: '🗑️ Histórico de dados limpo pelo usuário'
-      }).catch(err => console.error('Falha notificação histórico:', err));
-    }
-    
-    // EXPORTAÇÃO CSV
-    else if (message.includes('Exportação de CSV iniciada')) {
+        message: '🗑️ Historial de datos limpiado por el usuario',
+      });
+    } else if (message.includes('Exportação de CSV iniciada')) {
       reportAlertToServer({
-        type: 'system_action', 
+        type: 'system_action',
         level: 'info',
-        message: '📊 Exportação de dados CSV iniciada'
-      }).catch(err => console.error('Falha notificação exportação:', err));
-    }
-    
-    // ENVIAR CONTROLES (BOMBA, VENTILADORES, LUZES)
-    else if (message.includes('Comando enviado -> BOMBA DE RIEGO')) {
-      // Extrai os valores da mensagem
+        message: '📊 Exportación de datos CSV iniciada',
+      });
+    } else if (message.includes('Comando enviado -> BOMBA DE RIEGO')) {
       const bomba = message.match(/BOMBA DE RIEGO: (\d+)%/)?.[1] || '0';
       const ventiladores = message.match(/AFICIONADOS: (\d+)%/)?.[1] || '0';
-      const luzes = message.includes('LUCES: true') ? 'LIGADAS' : 'DESLIGADAS';
+      const luzes = message.includes('LUCES: true') ? 'ENCENDIDAS' : 'APAGADAS';
       const modo = message.match(/Modo: (\w+)/)?.[1] || 'manual';
-      
       reportAlertToServer({
         type: 'control_action',
         level: 'info',
-        message: `🎛️ Controles enviados - Bomba: ${bomba}%, Ventiladores: ${ventiladores}%, Luzes: ${luzes}, Modo: ${modo}`
-      }).catch(err => console.error('Falha notificação controles:', err));
-    }
-    
-    // 👇 ALERTAS DE HUMIDADE - MANTIDOS (são importantes)
-    else if (message.includes('ALERTA: Humidade alta detectada')) {
-      const humidityValue = message.match(/(\d+)%/)?.[1] || 'unknown';
+        message: `🎛️ Controles enviados - Bomba: ${bomba}%, Ventiladores: ${ventiladores}%, Luces: ${luzes}, Modo: ${modo}`,
+      });
+    } else if (message.includes('ALERTA: Humidade alta detectada')) {
+      const humidityValue = message.match(/(\d+)%/)?.[1] || 'desconocido';
       reportAlertToServer({
         type: 'humidity_high',
         level: 'warning',
-        message: `⚠️ ALERTA: Humidade ALTA detectada - ${humidityValue}% (acima de ${HUMIDITY_ALERT_THRESHOLD}%)`
-      }).catch(err => console.error('Falha notificação humidade alta:', err));
-    }
-    else if (message.includes('ALERTA: Humidade baixa detectada')) {
-      const humidityValue = message.match(/(\d+)%/)?.[1] || 'unknown';
+        message: `⚠️ ALERTA: Humedad ALTA detectada - ${humidityValue}%`,
+      });
+    } else if (message.includes('ALERTA: Humidade baixa detectada')) {
+      const humidityValue = message.match(/(\d+)%/)?.[1] || 'desconocido';
       reportAlertToServer({
         type: 'humidity_low',
         level: 'warning',
-        message: `🔻 ALERTA: Humidade BAIXA detectada - ${humidityValue}% (abaixo de ${HUMIDITY_LOW_ALERT_THRESHOLD}%)`
-      }).catch(err => console.error('Falha notificação humidade baixa:', err));
+        message: `🔻 ALERTA: Humedad BAJA detectada - ${humidityValue}%`,
+      });
     }
   };
 
   const changeMode = (newMode) => {
     const prev = prevModeRef.current ?? mode;
     if (newMode === prev) {
-      addEvent(`Tentativa de mudar modo para o mesmo valor: ${newMode} (ignorado)`, 'info');
+      addEvent(`Intento de cambiar modo al mismo valor: ${newMode} (ignorado)`, 'info');
       return;
     }
     setMode(newMode);
-    addEvent(`Modo alterado: ${prev} → ${newMode}`, 'action', { from: prev, to: newMode });
+    addEvent(`Modo cambiado: ${prev} → ${newMode}`, 'action', { from: prev, to: newMode });
     prevModeRef.current = newMode;
   };
 
+  // 🔹 Enviar comandos principales
   const handleSendControls = async () => {
     try {
-      const payload = { mode, irrigation: Number(irrigation), fans: Number(fans), lights: !!lights };
+      const payload = {
+        mode,
+        irrigation: Number(irrigation),
+        fans: Number(fans),
+        lights: !!lights,
+      };
       await sendControl(payload);
-      addEvent(`Comando enviado -> BOMBA DE RIEGO: ${payload.irrigation}%, AFICIONADOS: ${payload.fans}%, LUCES: ${payload.lights ? 'ON' : 'OFF'}, Modo: ${payload.mode}`, 
-        'action', { BOMBA_DE_RIEGO: payload.irrigation, AFICIONADOS: payload.fans, LUCES: payload.lights, MODO: payload.mode });
+      addEvent(
+        `Comando enviado -> BOMBA DE RIEGO: ${payload.irrigation}%, AFICIONADOS: ${payload.fans}%, LUCES: ${payload.lights}, Modo: ${payload.mode}`,
+        'action'
+      );
     } catch (e) {
-      addEvent("Erro ao enviar o controle para o ESP", 'error');
+      addEvent('Error al enviar el control al backend', 'error');
     }
   };
 
-  // Botão de emergência
+  // 🆘 Parada de emergencia
   const handleEmergencyStop = async () => {
-    addEvent("PARADA DE EMERGENCIA ATIVADA", 'warning');
+    addEvent('PARADA DE EMERGENCIA ACTIVADA', 'warning');
+    setIrrigation(0);
+    setFans(0);
+    setLights(false);
+    changeMode('manual');
 
-    setIrrigation(0); setFans(0); setLights(false); changeMode('manual');
     try {
-      await sendControl({ mode: 'manual', irrigation: 0, fans: 0, lights: false });
-      addEvent("Comando de emergência enviado", 'action', { BOMBA_DE_RIEGO: 0, AFICIONADOS: 0, LUCES: false, MODO: 'manual' });
+      await sendControl({ command: 'EMERGENCY_STOP' });
+      await sendControl({ mode: 'manual', irrigation: 0, fans: 0, lights: false, paused: true });
+      setIsPaused(true);
+      addEvent('Comando de emergencia enviado', 'action');
     } catch (e) {
-      addEvent("Falha ao enviar emergência", 'error');
+      addEvent('Fallo al enviar emergencia', 'error');
     }
   };
 
-  // Botão Pausar / Retomar
+  // ⏸️ Pausar / Reanudar
   const handlePauseToggle = async () => {
     const newPauseState = !isPaused;
     setIsPaused(newPauseState);
-    addEvent(newPauseState ? 'Sistema pausado' : 'Sistema retomado', 'action', { paused: newPauseState });
+    addEvent(newPauseState ? 'Sistema pausado' : 'Sistema reanudado', 'action');
 
     try {
       await sendControl({ paused: newPauseState });
     } catch (e) {
-      addEvent(`Erro ao enviar comando de pausa/retomada.`, 'error');
+      addEvent('Error al enviar comando de pausa/reanudación.', 'error');
       setIsPaused(!newPauseState);
     }
   };
 
+  // ⚙️ Actualización periódica de sensores
+  useEffect(() => {
+    let active = true;
+    const updateSensors = async () => {
+      if (isPaused) return;
+      try {
+        const data = await fetchSensors();
+        if (!active) return;
+
+        setTemperature(data.temperature ?? null);
+        setHumidity(data.humidity ?? null);
+        setWaterLevel(data.water_level ?? null);
+
+        const sample = {
+          ts: data.ts || new Date().toISOString(),
+          temperature: data.temperature,
+          humidity: data.humidity,
+          water_level: data.water_level,
+        };
+        setHistory((prev) => [...prev.slice(-MAX_HISTORY + 1), sample]);
+
+        addEvent(
+          `Datos recibidos: T:${sample.temperature ?? '-'}°C H:${sample.humidity ?? '-'}% W:${sample.water_level ?? '-'}%`,
+          'success'
+        );
+
+        // 🔔 Alertas de humedad
+        if (sample.humidity != null) {
+          if (sample.humidity > HUMIDITY_ALERT_THRESHOLD && !humidityAlertSent.current) {
+            addEvent(`ALERTA: Humedad alta detectada: ${sample.humidity}%`, 'warning');
+            humidityAlertSent.current = true;
+          } else if (sample.humidity < HUMIDITY_LOW_ALERT_THRESHOLD && !humidityLowAlertSent.current) {
+            addEvent(`ALERTA: Humedad baja detectada: ${sample.humidity}%`, 'warning');
+            humidityLowAlertSent.current = true;
+          } else if (
+            (sample.humidity <= HUMIDITY_ALERT_THRESHOLD && humidityAlertSent.current) ||
+            (sample.humidity >= HUMIDITY_LOW_ALERT_THRESHOLD && humidityLowAlertSent.current)
+          ) {
+            humidityAlertSent.current = false;
+            humidityLowAlertSent.current = false;
+          }
+        }
+      } catch (e) {
+        addEvent(`Fallo al obtener sensores: ${e.message}`, 'error');
+      }
+    };
+
+    updateSensors();
+    const interval = setInterval(updateSensors, 3000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [isPaused]);
+
   const handleClearHistory = () => {
     setHistory([]);
-    addEvent('Histórico limpo', 'action');
+    addEvent('Historial limpiado', 'action');
   };
 
   const handleExport = () => {
     if (!history.length) {
-      addEvent('O histórico está vazio. Nada para exportar.', 'warning');
+      addEvent('El historial está vacío. Nada para exportar.', 'warning');
       return;
     }
     setIsExportModalOpen(true);
-    addEvent('Exportação de CSV iniciada', 'action');
+    addEvent('Exportación de CSV iniciada', 'action');
   };
-
-  // Atualização dos sensores - SEM NOTIFICAÇÕES AUTOMÁTICAS
-  useEffect(() => {
-    let mounted = true;
-    const getAndSet = async () => {
-      if (isPaused) return;
-      try {
-        const data = await fetchSensors();
-        if (!mounted) return;
-
-        if (typeof data.is_paused === 'boolean' && data.is_paused !== isPaused) {
-          setIsPaused(data.is_paused);
-        }
-
-        const sample = {
-          ts: data.ts || new Date().toISOString(),
-          temperature: data.temperature ?? null,
-          humidity: data.humidity ?? null,
-          water_level: data.water_level ?? null,
-          irrigation: Number(irrigation),
-          fans: Number(fans),
-          lights: !!lights
-        };
-
-        setTemperature(sample.temperature);
-        setHumidity(sample.humidity);
-        setWaterLevel(sample.water_level);
-        setHistory(prev => [...prev.slice(-MAX_HISTORY + 1), sample]);
-
-        addEvent(`Dados recebidos: T:${sample.temperature ?? '-'}°C H:${sample.humidity ?? '-'}% W:${sample.water_level ?? '-'}%`, 'success');
-
-        // 👇 APENAS ATUALIZA A TELA - NÃO ENVIA NOTIFICAÇÕES AUTOMÁTICAS
-
-        // Lógica de alerta de humidade (ALTA e BAIXA) - MANTIDO
-        if (sample.humidity != null) {
-          // Alerta de humidade ALTA
-          if (sample.humidity > HUMIDITY_ALERT_THRESHOLD && !humidityAlertSent.current) {
-            addEvent(`ALERTA: Humidade alta detectada: ${sample.humidity}%`, 'warning');
-            humidityAlertSent.current = true;
-          } 
-          // Alerta de humidade BAIXA
-          else if (sample.humidity < HUMIDITY_LOW_ALERT_THRESHOLD && !humidityLowAlertSent.current) {
-            addEvent(`ALERTA: Humidade baixa detectada: ${sample.humidity}%`, 'warning');
-            humidityLowAlertSent.current = true;
-          }
-          // Normalização da humidade (ambos os casos)
-          else if (
-            (sample.humidity <= HUMIDITY_ALERT_THRESHOLD && humidityAlertSent.current) ||
-            (sample.humidity >= HUMIDITY_LOW_ALERT_THRESHOLD && humidityLowAlertSent.current)
-          ) {
-            if (sample.humidity <= HUMIDITY_ALERT_THRESHOLD && humidityAlertSent.current) {
-              addEvent(`Humidade alta normalizada: ${sample.humidity}%`, 'info');
-              humidityAlertSent.current = false;
-            }
-            if (sample.humidity >= HUMIDITY_LOW_ALERT_THRESHOLD && humidityLowAlertSent.current) {
-              addEvent(`Humidade baixa normalizada: ${sample.humidity}%`, 'info');
-              humidityLowAlertSent.current = false;
-            }
-          }
-        }
-
-      } catch (e) {
-        console.warn("fetchSensors erro:", e);
-        addEvent(`Falha ao buscar sensores: ${e?.message || 'erro desconhecido'}`, 'error');
-      }
-    };
-    getAndSet();
-    const iv = setInterval(getAndSet, 5000);
-    return () => { mounted = false; clearInterval(iv); };
-  }, [isPaused]);
-
-  useEffect(() => {
-    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch (e) { console.warn('Erro salvando histórico', e); }
-  }, [history]);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(HISTORY_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) setHistory(parsed.slice(-MAX_HISTORY));
-      }
-    } catch (e) { console.warn('Não foi possível carregar histórico do localStorage', e); }
-  }, []);
 
   const isManualMode = mode === 'manual';
 
@@ -289,38 +252,50 @@ function App() {
         <div className={styles.headerArea}>
           <Header mode={mode} setMode={changeMode} />
         </div>
+
         <div className={styles.sensorArea}>
           <SensorDisplay icon={<FaTemperatureHigh />} label="TEMPERATURA" value={temperature} unit="°C" />
           <SensorDisplay icon={<FaTint />} label="HUMEDAD RELATIVA" value={humidity} unit="%" />
           <SensorDisplay icon={<FaWater />} label="NIVEL DEL AGUA" value={waterLevel} unit="%" />
         </div>
+
         <div className={styles.controlsArea}>
           <ControlSlider label="BOMBA DE RIEGO" value={irrigation} onChange={(e) => setIrrigation(e.target.value)} disabled={!isManualMode || isPaused} />
-          <ControlSlider label="AFICIONADOS" value={fans} onChange={(e) => setFans(e.target.value)} disabled={!isManualMode || isPaused} />
+          <ControlSlider label="VENTILADORES" value={fans} onChange={(e) => setFans(e.target.value)} disabled={!isManualMode || isPaused} />
           <ControlButton type="toggle" label="LUCES" active={lights} onClick={() => setLights(!lights)} disabled={!isManualMode || isPaused} />
           <ControlButton type="button" label="Enviar Controles" onClick={handleSendControls} disabled={!isManualMode || isPaused} />
           <ControlButton type="emergency" label="PARADA DE EMERGENCIA" onClick={handleEmergencyStop} />
         </div>
+
         <div className={styles.chartArea}>
           <TimeSeriesChart
             data={history}
             lines={[
-              { key: "temperature", name: "Temperatura (°C)", color: "var(--accent-red)" },
-              { key: "humidity", name: "Humedad (%)", color: "var(--accent-cyan)" },
-              { key: "water_level", name: "Nivel de Agua (%)", color: "var(--accent-green)" },
+              { key: 'temperature', name: 'Temperatura (°C)', color: 'var(--accent-red)' },
+              { key: 'humidity', name: 'Humedad (%)', color: 'var(--accent-cyan)' },
+              { key: 'water_level', name: 'Nivel de Agua (%)', color: 'var(--accent-green)' },
             ]}
           />
         </div>
+
         <div className={styles.actionsArea}>
-          <button className={styles.actionButton} onClick={handleClearHistory}>Limpar Histórico</button>
-          <button className={styles.actionButton} onClick={handlePauseToggle}>{isPaused ? 'Retomar' : 'Pausar'}</button>
-          <button className={styles.actionButton} onClick={handleExport}>Exportar CSV</button>
+          <button className={styles.actionButton} onClick={handleClearHistory}>
+            Limpiar Historial
+          </button>
+          <button className={styles.actionButton} onClick={handlePauseToggle}>
+            {isPaused ? 'Reanudar' : 'Pausar'}
+          </button>
+          <button className={styles.actionButton} onClick={handleExport}>
+            Exportar CSV
+          </button>
           <div className={styles.sampleCount}>Demostraciones: {history.length}</div>
         </div>
+
         <div className={styles.logsArea}>
           <EventLog events={events} />
         </div>
       </div>
+
       {isExportModalOpen && <ExportModal history={history} onClose={() => setIsExportModalOpen(false)} />}
     </>
   );
